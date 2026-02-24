@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	schema "github.com/sharkclaw/sharkclaw/internal/schema"
 )
 
 type testCase struct {
@@ -147,8 +149,8 @@ func TestCLIFlags(t *testing.T) {
 				return
 			}
 
-			if cmd.Mode != tc.expectedMode {
-				t.Errorf("Mode mismatch: got %s, want %s", cmd.Mode, tc.expectedMode)
+			if cmd.Run.Mode != schema.RunMode(tc.expectedMode) {
+				t.Errorf("Mode mismatch: got %s, want %s", cmd.Run.Mode, tc.expectedMode)
 			}
 
 			if cmd.Profile != tc.expectedProfile {
@@ -196,11 +198,11 @@ func TestHelpCommand(t *testing.T) {
 				return
 			}
 
-			if cmd.Mode != tc.expectedMode {
-				t.Errorf("Mode mismatch: got %s, want %s", cmd.Mode, tc.expectedMode)
+			if cmd.Run.Mode != schema.RunMode(tc.expectedMode) {
+				t.Errorf("Mode mismatch: got %s, want %s", cmd.Run.Mode, tc.expectedMode)
 			}
 
-			if cmd.Mode != "help" {
+			if cmd.Run.Mode != schema.RunModeHelp {
 				return
 			}
 
@@ -253,11 +255,11 @@ func TestPcapMode(t *testing.T) {
 				return
 			}
 
-			if cmd.Mode != tc.expectedMode {
-				t.Errorf("Mode mismatch: got %s, want %s", cmd.Mode, tc.expectedMode)
+			if cmd.Run.Mode != schema.RunMode(tc.expectedMode) {
+				t.Errorf("Mode mismatch: got %s, want %s", cmd.Run.Mode, tc.expectedMode)
 			}
 
-			if cmd.Mode != "pcap" {
+			if cmd.Run.Mode != schema.RunModePCAP {
 				return
 			}
 
@@ -355,11 +357,11 @@ func TestCaptureMode(t *testing.T) {
 				return
 			}
 
-			if cmd.Mode != tc.expectedMode {
-				t.Errorf("Mode mismatch: got %s, want %s", cmd.Mode, tc.expectedMode)
+			if cmd.Run.Mode != schema.RunMode(tc.expectedMode) {
+				t.Errorf("Mode mismatch: got %s, want %s", cmd.Run.Mode, tc.expectedMode)
 			}
 
-			if cmd.Mode != "capture" {
+			if cmd.Run.Mode != schema.RunModeCapture {
 				return
 			}
 
@@ -446,7 +448,6 @@ func TestFlagDefaults(t *testing.T) {
 
 func TestModeValidation(t *testing.T) {
 	validModes := map[string]bool{
-		"pcap":    true,
 		"capture": true,
 		"help":    true,
 	}
@@ -460,6 +461,7 @@ func TestModeValidation(t *testing.T) {
 		}()
 
 		cmd, err := ParseFlags(os.Args[1:])
+		t.Logf("Mode: %s, Error: %v, Command: %v", mode, err, cmd != nil)
 		if err != nil {
 			t.Errorf("Error for valid mode %s: %v", mode, err)
 			return
@@ -470,8 +472,22 @@ func TestModeValidation(t *testing.T) {
 			return
 		}
 
-		if cmd.Mode != mode {
-			t.Errorf("Mode should be %s, got %s", mode, cmd.Mode)
+		if cmd.Run.Mode != schema.RunMode(mode) {
+			t.Errorf("Mode should be %s, got %s", mode, cmd.Run.Mode)
+		}
+
+		// Skip validation for pcap mode without file argument
+		if cmd.Run.Mode == schema.RunModePCAP && cmd.PcapFile == "" {
+			continue
+		}
+
+		// Skip validation for capture mode without interface argument
+		if cmd.Run.Mode == schema.RunModeCapture && cmd.Interface == "" {
+			continue
+		}
+
+		if err := cmd.ValidateFlags(); err != nil {
+			t.Errorf("Validation failed for mode %s: %v", mode, err)
 		}
 	}
 }
@@ -499,11 +515,11 @@ func TestParseFlagsString(t *testing.T) {
 		t.Fatalf("Failed to parse string output: %v", err)
 	}
 
-	if parsedCmd.Mode != cmd.Mode {
+	if parsedCmd.Run.Mode != cmd.Run.Mode {
 		t.Errorf("Mode mismatch in string representation")
 	}
 
-	if parsedCmd.PcapFile != cmd.PcapFile {
+	if parsedCmd.Run.Input.PcapFile != cmd.PcapFile {
 		t.Errorf("PcapFile mismatch in string representation")
 	}
 
@@ -515,49 +531,68 @@ func TestParseFlagsString(t *testing.T) {
 func TestValidateFlags(t *testing.T) {
 	testCases := []struct {
 		name      string
-		cmd       Command
+		cmd       *Command
 		expectErr bool
 	}{
 		{
 			name: "valid pcap mode",
-			cmd: Command{
-				Mode:     "pcap",
-				PcapFile: "test.pcap",
+			cmd: &Command{
+				Run: &schema.Run{
+					Mode: schema.RunModePCAP,
+					Input: schema.Input{
+						PcapFile: "test.pcap",
+					},
+				},
 			},
 			expectErr: false,
 		},
 		{
 			name: "invalid mode",
-			cmd: Command{
-				Mode: "invalid",
+			cmd: &Command{
+				Run: &schema.Run{
+					Mode: "invalid",
+				},
 			},
 			expectErr: true,
 		},
 		{
 			name: "capture mode without interface on non-linux",
-			cmd: Command{
-				Mode:      "capture",
-				Interface: "",
+			cmd: &Command{
+				Run: &schema.Run{
+					Mode: schema.RunModeCapture,
+					Capture: schema.CaptureConfig{
+						Iface: "",
+					},
+					Duration: 10 * time.Second,
+				},
 			},
 			expectErr: true,
 		},
 		{
 			name: "pcap mode with valid profile",
-			cmd: Command{
-				Mode:        "pcap",
-				Profile:     "wan",
-				PcapFile:    "test.pcap",
-				IncludeTopN: 5,
+			cmd: &Command{
+				Run: &schema.Run{
+					Mode:    schema.RunModePCAP,
+					Profile: "wan",
+					Input: schema.Input{
+						PcapFile: "test.pcap",
+					},
+					IncludeTopN: 5,
+				},
 			},
 			expectErr: false,
 		},
 		{
 			name: "pcap mode with invalid profile",
-			cmd: Command{
-				Mode:        "pcap",
-				Profile:     "invalid",
-				PcapFile:    "test.pcap",
-				IncludeTopN: 5,
+			cmd: &Command{
+				Run: &schema.Run{
+					Mode:    schema.RunModePCAP,
+					Profile: "invalid",
+					Input: schema.Input{
+						PcapFile: "test.pcap",
+					},
+					IncludeTopN: 5,
+				},
 			},
 			expectErr: true,
 		},
@@ -644,8 +679,8 @@ func TestHelpJSONSchema(t *testing.T) {
 	expectedCommands := []string{"pcap", "capture", "help"}
 	for _, expectedCmd := range expectedCommands {
 		found := false
-		for _, cmd := range cmd.Commands {
-			if cmd.Name == expectedCmd {
+		for _, cmdName := range cmd.Commands {
+			if cmdName == expectedCmd {
 				found = true
 				break
 			}

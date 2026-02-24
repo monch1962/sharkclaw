@@ -182,6 +182,10 @@ type Run struct {
 	Input           Input         `json:"input"`
 	Capture         CaptureConfig `json:"capture"`
 	Profile         string        `json:"profile"`
+	Duration        time.Duration `json:"duration"`
+	Pretty          bool          `json:"pretty"`
+	IncludeTopN     int           `json:"include_topN"`
+	Help            *Help         `json:"help"`
 }
 
 type Help struct {
@@ -640,4 +644,35 @@ func GetPercentile(sortedValues []int, percentile float64) int {
 	}
 
 	return sortedValues[index]
+}
+
+func (r *Run) SetPcapFile(filePath string) {
+	r.Input.PcapFile = filePath
+}
+
+func (r *Run) SetCaptureInterface(iface string) {
+	r.Capture.Iface = iface
+}
+
+func (r *Run) SetCaptureBPF(bpf string) {
+	r.Capture.BPF = bpf
+}
+
+func (r *Run) SetVersion(version string) {
+	// Version is set via ldflags, so this is a no-op
+}
+func (r *Run) String() (string, error) {
+	data, err := json.Marshal(r)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (r *Run) PrettyString() (string, error) {
+	data, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }

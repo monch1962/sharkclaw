@@ -1,87 +1,44 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"strconv"
 	"time"
+
+	schema "github.com/sharkclaw/sharkclaw/internal/schema"
 )
-
-type Command struct {
-	Mode        string            `json:"mode"`
-	PcapFile    string            `json:"pcap_file"`
-	Interface   string            `json:"interface"`
-	BPF         string            `json:"bpf"`
-	Profile     string            `json:"profile"`
-	Duration    time.Duration     `json:"duration"`
-	Pretty      bool              `json:"pretty"`
-	IncludeTopN int               `json:"include_topN"`
-	Flags       map[string]string `json:"flags"`
-	Description string            `json:"description"`
-	Commands    []CommandInfo     `json:"commands"`
-	Signals     []SignalInfo      `json:"signals"`
-}
-
-func (c *Command) SetPcapFile(file string) {
-	c.PcapFile = file
-}
-
-func (c *Command) SetCaptureInterface(iface string) {
-	c.Interface = iface
-}
-
-func (c *Command) SetCaptureBPF(bpf string) {
-	c.BPF = bpf
-}
-
-type CommandInfo struct {
-	Name        string   `json:"name"`
-	Examples    []string `json:"examples"`
-	Description string   `json:"description"`
-}
-
-type SignalInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Meaning     string `json:"meaning"`
-}
 
 func ParseFlags(args []string) (*Command, error) {
 	if len(args) == 0 {
-		return &Command{
-			Mode:        "help",
-			Description: "sharkclaw detects and counts 'weird' network behaviors",
-		}, nil
+		cmd := &Command{Run: &schema.Run{
+			Mode:      schema.RunModeHelp,
+			StartTime: time.Now(),
+			EndTime:   time.Now(),
+		}}
+		cmd.initHelpFields()
+		return cmd, nil
 	}
 
 	cmd := args[0]
-	var result *Command
-	var err error
-
 	switch cmd {
 	case "pcap":
-		result, err = parsePcapMode(args[1:])
+		return parsePcapMode(args[1:])
 	case "capture":
-		result, err = parseCaptureMode(args[1:])
+		return parseCaptureMode(args[1:])
 	case "help", "--help", "-h":
 		return parseHelpMode(), nil
 	default:
 		return nil, fmt.Errorf("unknown command: %s", cmd)
 	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 func parsePcapMode(args []string) (*Command, error) {
-	cmd := &Command{
-		Mode:    "pcap",
-		Profile: "wan",
-		Flags:   make(map[string]string),
+	run := &schema.Run{
+		Mode:      schema.RunModePCAP,
+		Profile:   "wan",
+		StartTime: time.Now(),
+		EndTime:   time.Now(),
 	}
 
 	if len(args) == 0 {
@@ -89,50 +46,57 @@ func parsePcapMode(args []string) (*Command, error) {
 	}
 
 	var f = flag.NewFlagSet("pcap", flag.ContinueOnError)
-	f.StringVar(&cmd.PcapFile, "file", "", "Path to PCAP/PCAPNG file")
-	f.StringVar(&cmd.BPF, "filter", "", "BPF filter")
-	f.StringVar(&cmd.Profile, "profile", "wan", "Threshold profile (lan|wan)")
-	f.BoolVar(&cmd.Pretty, "pretty", false, "Output pretty-printed JSON")
-	f.IntVar(&cmd.IncludeTopN, "include-topN", 5, "Limit top talkers to N entries (0 disables)")
+	f.StringVar(&run.Input.PcapFile, "file", "", "Path to PCAP/PCAPNG file")
+	f.StringVar(&run.Capture.BPF, "filter", "", "BPF filter")
+	f.StringVar(&run.Profile, "profile", "wan", "Threshold profile (lan|wan)")
+	f.BoolVar(&run.Pretty, "pretty", false, "Output pretty-printed JSON")
+	f.IntVar(&run.IncludeTopN, "include-topN", 5, "Limit top talkers to N entries (0 disables)")
 
 	if err := f.Parse(args); err != nil {
 		return nil, fmt.Errorf("failed to parse pcap flags: %w", err)
 	}
 
-	if cmd.PcapFile == "" {
+	if run.Input.PcapFile == "" {
 		return nil, fmt.Errorf("--file is required for pcap mode")
 	}
 
-	if cmd.Profile != "lan" && cmd.Profile != "wan" {
-		return nil, fmt.Errorf("invalid profile: %s (must be lan or wan)", cmd.Profile)
+	if run.Profile != "lan" && run.Profile != "wan" {
+		return nil, fmt.Errorf("invalid profile: %s (must be lan or wan)", run.Profile)
 	}
 
-	if cmd.IncludeTopN < 0 {
+	if run.IncludeTopN < 0 {
 		return nil, fmt.Errorf("--include-topN must be non-negative")
 	}
 
-	cmd.Flags["file"] = cmd.PcapFile
-	cmd.Flags["profile"] = cmd.Profile
-	cmd.Flags["filter"] = cmd.BPF
-	cmd.Flags["pretty"] = fmt.Sprintf("%v", cmd.Pretty)
-	cmd.Flags["include-topN"] = strconv.Itoa(cmd.IncludeTopN)
-
+	cmd := &Command{Run: run}
+	cmd.SetPcapFile(run.Input.PcapFile)
+	cmd.SetCaptureBPF(run.Capture.BPF)
+	cmd.Flags = make(map[string]string)
+	cmd.Flags["file"] = run.Input.PcapFile
+	if run.Capture.BPF != "" {
+		cmd.Flags["filter"] = run.Capture.BPF
+	}
+	if run.Profile != "wan" {
+		cmd.Flags["profile"] = run.Profile
+	}
+	if run.Pretty {
+		cmd.Flags["pretty"] = "true"
+	}
+	if run.IncludeTopN != 5 {
+		cmd.Flags["include-topN"] = fmt.Sprintf("%d", run.IncludeTopN)
+	}
 	return cmd, nil
 }
 
 func parseCaptureMode(args []string) (*Command, error) {
-	cmd := &Command{
-		Mode:        "capture",
-		Interface:   "",
-		BPF:         "",
-		Profile:     "wan",
-		IncludeTopN: 5,
-		Flags:       make(map[string]string),
+	run := &schema.Run{
+		Mode:      schema.RunModeCapture,
+		StartTime: time.Now(),
+		EndTime:   time.Now(),
 	}
 
 	var f = flag.NewFlagSet("capture", flag.ContinueOnError)
 
-	// Use string flag for duration to handle both "10s" and "10"
 	var durationStr string
 	f.StringVar(&durationStr, "duration", "10s", "Capture duration")
 
@@ -154,184 +118,73 @@ func parseCaptureMode(args []string) (*Command, error) {
 
 	// Parse duration manually to support both "10s" and "10"
 	var err error
-	cmd.Duration, err = time.ParseDuration(durationStr)
+	run.Duration, err = time.ParseDuration(durationStr)
 	if err != nil {
-		// Try to parse as integer seconds
 		seconds, err := strconv.Atoi(durationStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid duration format: %s", durationStr)
 		}
-		cmd.Duration = time.Duration(seconds) * time.Second
+		run.Duration = time.Duration(seconds) * time.Second
 	}
 
 	// Only set fields if they were explicitly provided
-	cmd.Interface = iface
-	cmd.BPF = filter
-	cmd.Profile = profile
-	cmd.Pretty = pretty
-	cmd.IncludeTopN = includeTopN
+	run.Capture.Iface = iface
+	run.Capture.BPF = filter
+	run.Profile = profile
+	run.Pretty = pretty
+	run.IncludeTopN = includeTopN
 
-	if cmd.Profile != "lan" && cmd.Profile != "wan" {
-		return nil, fmt.Errorf("invalid profile: %s (must be lan or wan)", cmd.Profile)
+	if run.Profile != "lan" && run.Profile != "wan" {
+		return nil, fmt.Errorf("invalid profile: %s (must be lan or wan)", run.Profile)
 	}
 
-	if cmd.IncludeTopN < 0 {
+	if run.IncludeTopN < 0 {
 		return nil, fmt.Errorf("--include-topN must be non-negative")
 	}
 
-	if cmd.Duration <= 0 {
+	if run.Duration <= 0 {
 		return nil, fmt.Errorf("--duration must be positive")
 	}
 
-	cmd.Flags["duration"] = durationStr
-	if cmd.Interface != "" {
-		cmd.Flags["iface"] = cmd.Interface
-	}
-	if cmd.BPF != "" {
-		cmd.Flags["filter"] = cmd.BPF
-	}
-	cmd.Flags["profile"] = cmd.Profile
-	cmd.Flags["pretty"] = fmt.Sprintf("%v", cmd.Pretty)
-	cmd.Flags["include-topN"] = strconv.Itoa(cmd.IncludeTopN)
+	run.EndTime = run.StartTime.Add(run.Duration)
 
+	cmd := &Command{Run: run}
+	if iface != "" {
+		cmd.SetCaptureInterface(iface)
+	}
+	if filter != "" {
+		cmd.SetCaptureBPF(filter)
+	}
+	cmd.Flags = make(map[string]string)
+	if run.Duration != 10*time.Second {
+		cmd.Flags["duration"] = durationStr
+	}
+	if iface != "" {
+		cmd.Flags["iface"] = iface
+	}
+	if filter != "" {
+		cmd.Flags["filter"] = filter
+	}
+	if profile != "wan" {
+		cmd.Flags["profile"] = profile
+	}
+	if pretty {
+		cmd.Flags["pretty"] = "true"
+	}
+	if includeTopN != 5 {
+		cmd.Flags["include-topN"] = fmt.Sprintf("%d", includeTopN)
+	}
 	return cmd, nil
 }
 
 func parseHelpMode() *Command {
-	return &Command{
-		Mode:        "help",
-		Description: "Detects and counts 'weird' network behaviors indicative of attacks and/or network problems",
-		Commands: []CommandInfo{
-			{
-				Name: "pcap",
-				Examples: []string{
-					"sharkclaw pcap --file test.pcap",
-					"sharkclaw pcap --file test.pcap --profile wan",
-					"sharkclaw pcap --file test.pcap --include-topN 10",
-				},
-				Description: "Analyze a PCAP or PCAPNG file",
-			},
-			{
-				Name: "capture",
-				Examples: []string{
-					"sharkclaw capture --duration 10s",
-					"sharkclaw capture --duration 30s --profile lan",
-					"sharkclaw capture --iface eth0 --duration 15s",
-				},
-				Description: "Capture live traffic for a specified duration and analyze",
-			},
-			{
-				Name: "help",
-				Examples: []string{
-					"sharkclaw --help",
-					"sharkclaw -h",
-					"sharkclaw help",
-				},
-				Description: "Display help information",
-			},
-		},
-		Flags: map[string]string{
-			"--file":         "Path to PCAP/PCAPNG file (PCAP mode only)",
-			"--duration":     "Capture duration (e.g., 10s, 30s, 5m). PCAP mode: use file instead.",
-			"--iface":        "Network interface for capture (capture mode only)",
-			"--filter":       "BPF filter for packet capture (e.g., 'tcp port 80')",
-			"--profile":      "Threshold profile (affects high-latency thresholds and DNS timeouts)",
-			"--pretty":       "Output pretty-printed JSON",
-			"--include-topN": "Limit top talkers arrays to N entries (0 disables)",
-		},
-		Signals: []SignalInfo{
-			{
-				Name:        "Incomplete TCP Handshakes",
-				Description: "SYN packets without corresponding SYN-ACK and ACK",
-				Meaning:     "Potential connection attempts that were never completed",
-			},
-			{
-				Name:        "TCP Resets",
-				Description: "RST packets in a flow",
-				Meaning:     "Forced connection termination",
-			},
-			{
-				Name:        "TCP Retransmissions",
-				Description: "Repeated segments with same sequence number",
-				Meaning:     "Packet loss, congestion, or network issues",
-			},
-			{
-				Name:        "Duplicate ACKs",
-				Description: "Repeated ACK numbers without forward progress",
-				Meaning:     "Possible packet loss or reordering",
-			},
-			{
-				Name:        "High Latency",
-				Description: "Elevated TCP handshake RTT or DNS RTT",
-				Meaning:     "Network congestion, poor connectivity",
-			},
-			{
-				Name:        "DNS Failures",
-				Description: "NXDOMAIN, SERVFAIL, or timeouts",
-				Meaning:     "Domain resolution problems",
-			},
-			{
-				Name:        "SYN Scan Suspects",
-				Description: "IPs with high SYN rate and low completion",
-				Meaning:     "Potential port scanners or attack attempts",
-			},
-			{
-				Name:        "DNS NXDOMAIN Anomalies",
-				Description: "High NXDOMAIN rate per client",
-				Meaning:     "DNS poisoning or malicious activity",
-			},
-		},
-	}
-}
-
-type FlagInfo struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Default     string `json:"default"`
-	Description string `json:"description"`
-}
-
-func (c *Command) ValidateFlags() error {
-	switch c.Mode {
-	case "pcap":
-		if c.PcapFile == "" {
-			return fmt.Errorf("--file is required for pcap mode")
-		}
-		if c.Profile != "lan" && c.Profile != "wan" {
-			return fmt.Errorf("invalid profile: %s (must be lan or wan)", c.Profile)
-		}
-	case "capture":
-		if c.Duration <= 0 {
-			return fmt.Errorf("--duration must be positive")
-		}
-		if c.Profile != "lan" && c.Profile != "wan" {
-			return fmt.Errorf("invalid profile: %s (must be lan or wan)", c.Profile)
-		}
-	}
-	return nil
-}
-
-func (c *Command) String() (string, error) {
-	data, err := json.Marshal(c)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal command to JSON: %w", err)
-	}
-	return string(data), nil
-}
-
-func (c *Command) PrettyString() (string, error) {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal command to JSON: %w", err)
-	}
-	return string(data), nil
-}
-
-func GetDefaultInterface() string {
-	return "any"
-}
-
-func SetVersion(version string) {
-	// In a real implementation, this would set the version in the schema
-	// For now, this is a placeholder
+	help := schema.NewHelp()
+	cmd := &Command{Run: &schema.Run{
+		Mode:      schema.RunModeHelp,
+		StartTime: time.Now(),
+		EndTime:   time.Now(),
+		Help:      &help,
+	}}
+	cmd.initHelpFields()
+	return cmd
 }
