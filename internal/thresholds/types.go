@@ -56,14 +56,14 @@ func GetThresholds(profile Profile) Thresholds {
 	case ProfileLAN:
 		return Thresholds{
 			HandshakeRTTMS: HandshakeRTTThresholds{
-				Medium:   300,
-				High:     700,
-				Critical: 1300,
+				Medium:   200,
+				High:     500,
+				Critical: 1200,
 			},
 			DNSRTTMS: DNSRTTThresholds{
-				Medium:   400,
-				High:     600,
-				Critical: 1200,
+				Medium:   150,
+				High:     400,
+				Critical: 1000,
 			},
 			IncompleteHandshakes: IncompleteHandshakeThresholds{
 				Medium: 0.10,
@@ -88,13 +88,13 @@ func GetThresholds(profile Profile) Thresholds {
 	case ProfileWAN:
 		return Thresholds{
 			HandshakeRTTMS: HandshakeRTTThresholds{
-				Medium:   1000,
-				High:     2000,
+				Medium:   800,
+				High:     1500,
 				Critical: 3500,
 			},
 			DNSRTTMS: DNSRTTThresholds{
-				Medium:   800,
-				High:     1200,
+				Medium:   400,
+				High:     900,
 				Critical: 2500,
 			},
 			IncompleteHandshakes: IncompleteHandshakeThresholds{
@@ -160,48 +160,32 @@ func (s Severity) String() string {
 }
 
 func ComputeSeverityForHandshakeRTT(p50, p95, p99 float64, thresh HandshakeRTTThresholds) Severity {
-	worst := p50
-	if p95 > worst {
-		worst = p95
-	}
-	if p99 > worst {
-		worst = p99
-	}
-
-	if worst >= thresh.Critical {
+	if p99 >= thresh.Critical {
 		return SeverityCritical
 	}
-	if worst >= thresh.High {
+	if p95 >= thresh.High {
 		return SeverityHigh
 	}
-	if worst >= thresh.Medium {
+	if p50 >= thresh.Medium {
 		return SeverityMedium
 	}
-	if worst > thresh.High/2 {
+	if p50 > thresh.High/2 {
 		return SeverityLow
 	}
 	return SeverityInfo
 }
 
 func ComputeSeverityForDNSRTT(p50, p95, p99 float64, thresh DNSRTTThresholds) Severity {
-	worst := p50
-	if p95 > worst {
-		worst = p95
-	}
-	if p99 > worst {
-		worst = p99
-	}
-
-	if worst >= thresh.Critical {
+	if p99 >= thresh.Critical {
 		return SeverityCritical
 	}
-	if worst >= thresh.High {
+	if p95 >= thresh.High {
 		return SeverityHigh
 	}
-	if worst >= thresh.Medium {
+	if p50 >= thresh.Medium {
 		return SeverityMedium
 	}
-	if worst > thresh.High/2 {
+	if p50 > thresh.High/2 {
 		return SeverityLow
 	}
 	return SeverityInfo

@@ -26,6 +26,9 @@ type Flow struct {
 	HandshakeComplete bool
 	FirstSYN          time.Time
 	ACKSeen           bool
+	SeqNumber         uint32
+	LastACKNumber     uint32
+	PreviousACKNumber uint32
 }
 
 // TCPHandshake tracks TCP handshake state
@@ -42,6 +45,7 @@ type DNSQuery struct {
 	TXID        uint16
 	Destination string
 	Complete    bool
+	RTT         int64
 }
 
 // Packet represents a network packet
@@ -70,6 +74,8 @@ type Analyzer struct {
 	tcpHandshakes map[string]*TCPHandshake
 	dnsQueries    map[string]*DNSQuery
 	rates         RateTracker
+	handshakeRTT  []int64 // Store handshake RTT in milliseconds
+	dnsRTT        []int64 // Store DNS RTT in milliseconds
 }
 
 // RateTracker tracks rates for various metrics
@@ -115,35 +121,33 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 		return nil, ErrNoPackets
 	}
 
-	// Initialize tracking structures
-	flows := make(map[string]*Flow)
-	tcpHandshakes := make(map[string]*TCPHandshake)
-	dnsQueries := make(map[string]*DNSQuery)
-	rates := RateTracker{}
+	// Calculate TCP reliability metrics
+	retransmissions := 0
+	duplicateACKs := 0
 
 	// Process each packet
 	for _, pkt := range packets {
 		// Track TCP handshakes
 		if pkt.Protocol == "TCP" {
-			tcpHandshakes = a.trackTCPHandshake(pkt, tcpHandshakes, flows, rates)
+			a.trackTCPHandshake(pkt, a.tcpHandshakes, a.flows, a.rates, &retransmissions, &duplicateACKs)
 		}
 
 		// Track DNS queries
 		if pkt.Protocol == "UDP" && pkt.DestinationPort == 53 {
-			dnsQueries = a.trackDNSQuery(pkt, dnsQueries)
+			a.trackDNSQuery(pkt, a.dnsQueries, &a.dnsRTT)
 		}
 	}
 
 	// Calculate incomplete handshakes
 	incompleteHandshakes := 0
-	for _, handshakes := range tcpHandshakes {
+	for _, handshakes := range a.tcpHandshakes {
 		if !(handshakes.SYN && handshakes.SYNACKSeen && handshakes.ACKSeen) {
 			incompleteHandshakes++
 		}
 	}
 
 	// Calculate rates
-	totalFlows := len(flows)
+	totalFlows := len(a.flows)
 	ratePercent := 0.0
 	if totalFlows > 0 {
 		ratePercent = float64(incompleteHandshakes) / float64(totalFlows) * 100
@@ -157,6 +161,10 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 	if summarySeverity == thresholds.SeverityInfo {
 		summarySeverity = thresholds.SeverityInfo
 	}
+
+	// Calculate top talkers
+	sources := a.calculateTopTalkers(packets, a.flows, "sources")
+	destinations := a.calculateTopTalkers(packets, a.flows, "destinations")
 
 	result := &AnalysisResult{
 		SchemaVersion: "1.0.0",
@@ -186,11 +194,22 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 					RatePercent: ratePercent,
 					Severity:    incompleteSeverity.String(),
 				},
+				Rets: ResetMetrics{
+					Count: a.calculateTCPResets(packets),
+				},
+				ReliabilityHints: ReliabilityHints{
+					Retransmissions: RetransmissionMetrics{
+						Count: retransmissions,
+					},
+					DupACKs: DuplicateACKMetrics{
+						Count: duplicateACKs,
+					},
+				},
 			},
 		},
 		TopTalkers: TopTalkers{
-			Sources:      a.calculateTopTalkers(packets, flows, "sources"),
-			Destinations: a.calculateTopTalkers(packets, flows, "destinations"),
+			Sources:      sources,
+			Destinations: destinations,
 		},
 	}
 
@@ -198,7 +217,7 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 }
 
 // trackTCPHandshake processes TCP packets and tracks handshake state
-func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHandshake, flows map[string]*Flow, rates RateTracker) map[string]*TCPHandshake {
+func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHandshake, flows map[string]*Flow, rates RateTracker, retransmissions *int, duplicateACKs *int) map[string]*TCPHandshake {
 	flowKey := a.createFlowKey(pkt.SourceIP, pkt.SourcePort, pkt.DestinationIP, pkt.DestinationPort)
 
 	// Initialize flow if not exists
@@ -211,6 +230,7 @@ func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHa
 			FirstSYN:          time.Time{},
 			LastSeen:          pkt.Timestamp,
 			HandshakeComplete: false,
+			SeqNumber:         pkt.SeqNumber,
 		}
 		rates.TCPFlows++
 	}
@@ -225,6 +245,10 @@ func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHa
 	}
 
 	if pkt.SYN && pkt.ACK && !tcpHandshakes[flowKey].SYNACKSeen {
+		// Calculate handshake RTT
+		handshakeRTT := pkt.Timestamp.Sub(flows[flowKey].FirstSYN).Milliseconds()
+		a.handshakeRTT = append(a.handshakeRTT, handshakeRTT)
+
 		tcpHandshakes[flowKey].SYNACKSeen = true
 		flows[flowKey].ACKSeen = true
 		flows[flowKey].HandshakeComplete = true
@@ -234,6 +258,20 @@ func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHa
 		tcpHandshakes[flowKey].ACKSeen = true
 		flows[flowKey].HandshakeComplete = true
 	}
+
+	// Detect retransmissions (same sequence number as previous packet)
+	if pkt.SeqNumber == flows[flowKey].SeqNumber && pkt.SeqNumber != flows[flowKey].LastACKNumber {
+		*retransmissions++
+	}
+
+	// Detect duplicate ACKs (ACK number doesn't advance)
+	if pkt.ACK && flows[flowKey].LastACKNumber > 0 && pkt.AckNumber == flows[flowKey].LastACKNumber && flows[flowKey].LastACKNumber != flows[flowKey].PreviousACKNumber {
+		*duplicateACKs++
+	}
+
+	flows[flowKey].PreviousACKNumber = flows[flowKey].LastACKNumber
+	flows[flowKey].LastACKNumber = pkt.AckNumber
+	flows[flowKey].SeqNumber = pkt.SeqNumber
 
 	if pkt.RST {
 		rates.TCPResets++
@@ -246,7 +284,7 @@ func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHa
 }
 
 // trackDNSQuery processes DNS packets and tracks query state
-func (a *Analyzer) trackDNSQuery(pkt Packet, dnsQueries map[string]*DNSQuery) map[string]*DNSQuery {
+func (a *Analyzer) trackDNSQuery(pkt Packet, dnsQueries map[string]*DNSQuery, dnsRTT *[]int64) {
 	flowKey := a.createFlowKey(pkt.SourceIP, pkt.SourcePort, pkt.DestinationIP, pkt.DestinationPort)
 
 	if _, exists := dnsQueries[flowKey]; !exists {
@@ -256,7 +294,21 @@ func (a *Analyzer) trackDNSQuery(pkt Packet, dnsQueries map[string]*DNSQuery) ma
 		}
 	}
 
-	return dnsQueries
+	// Check if this is a DNS response (typically has response flag set, or we assume if it's the next packet in sequence)
+	// For simplicity, we'll mark all non-query packets as responses
+	if !pkt.ACK && !pkt.SYN {
+		// This is a response packet
+		if dnsQueries[flowKey].Complete {
+			// Calculate RTT if query was received
+			if pkt.Timestamp.After(dnsQueries[flowKey].Timestamp) {
+				rtt := pkt.Timestamp.Sub(dnsQueries[flowKey].Timestamp).Milliseconds()
+				if rtt > 0 {
+					*dnsRTT = append(*dnsRTT, rtt)
+				}
+				dnsQueries[flowKey].Complete = true
+			}
+		}
+	}
 }
 
 // createFlowKey creates a unique key for a flow (4-tuple)
@@ -318,52 +370,69 @@ func (a *Analyzer) computeSeverityForIncompleteHandshakes(count int, ratePercent
 	return thresholds.ComputeSeverityForIncompleteHandshakes(count, ratePercent, a.thresh.IncompleteHandshakes)
 }
 
+// calculateLatency calculates latency statistics (p50, p95, p99)
+func (a *Analyzer) calculateLatency(latencies []int64) LatencyMetrics {
+	if len(latencies) == 0 {
+		return LatencyMetrics{
+			P50: 0,
+			P95: 0,
+			P99: 0,
+		}
+	}
+
+	// Sort latencies
+	sorted := make([]int64, len(latencies))
+	copy(sorted, latencies)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i] < sorted[j]
+	})
+
+	p50 := int(percentile(sorted, 50))
+	p95 := int(percentile(sorted, 95))
+	p99 := int(percentile(sorted, 99))
+
+	return LatencyMetrics{
+		P50: p50,
+		P95: p95,
+		P99: p99,
+	}
+}
+
+// calculateTCPResets calculates the total number of TCP RST packets
+func (a *Analyzer) calculateTCPResets(packets []Packet) int {
+	count := 0
+	for _, pkt := range packets {
+		if pkt.Protocol == "TCP" && pkt.RST {
+			count++
+		}
+	}
+	return count
+}
+
+// LatencyMetrics contains latency statistics
+type LatencyMetrics struct {
+	P50 int `json:"p50"`
+	P95 int `json:"p95"`
+	P99 int `json:"p99"`
+}
+
+// percentile calculates the nth percentile (n = 50, 95, 99)
+func percentile(sorted []int64, n int) int64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	index := (len(sorted) * n) / 100
+	return sorted[index]
+}
+
 // AnalyzeCapture analyzes captured traffic data
 func (a *Analyzer) AnalyzeCapture(packets []Packet, iface string, duration time.Duration) (*AnalysisResult, error) {
 	if len(packets) == 0 {
 		return nil, ErrNoPackets
 	}
 
-	result := &AnalysisResult{
-		SchemaVersion: "1.0.0",
-		Tool: ToolInfo{
-			Name:    "sharkclaw",
-			Version: "dev",
-		},
-		Run: RunData{
-			Mode:            "capture",
-			StartTime:       packets[0].Timestamp,
-			EndTime:         packets[len(packets)-1].Timestamp,
-			Duration:        duration,
-			DurationSeconds: float64(duration),
-			Profile:         a.profile,
-			IncludeTopN:     a.includeTopN,
-		},
-		Summary: AnalysisSummary{
-			SchemaVersion:    "1.0.0",
-			SignalsTriggered: 0,
-			Severity:         "info",
-		},
-		Metrics: Metrics{
-			TCPMetrics: TCPMetrics{
-				SynTotal: 0,
-				IncompleteHandshakes: IncompleteHandshakeMetrics{
-					Count:       0,
-					RatePercent: 0,
-					Severity:    "info",
-				},
-			},
-		},
-		TopTalkers: TopTalkers{
-			Sources:      []TopTalker{},
-			Destinations: []TopTalker{},
-		},
-	}
-
-	// TODO: Implement actual packet analysis
-	// This is a placeholder for the actual implementation
-
-	return result, nil
+	// Use the same analysis logic as AnalyzePcap
+	return a.AnalyzePcap(packets)
 }
 
 // AnalysisResult contains the analysis results
