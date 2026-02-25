@@ -34,8 +34,9 @@ type IncompleteHandshakeThresholds struct {
 }
 
 type TCPResetThresholds struct {
-	Medium float64 `json:"medium"`
-	High   float64 `json:"high"`
+	Medium   float64 `json:"medium"`
+	High     float64 `json:"high"`
+	Critical int     `json:"critical"`
 }
 
 type RetransmissionThresholds struct {
@@ -55,62 +56,64 @@ func GetThresholds(profile Profile) Thresholds {
 	case ProfileLAN:
 		return Thresholds{
 			HandshakeRTTMS: HandshakeRTTThresholds{
-				Medium:   200,
-				High:     500,
-				Critical: 1200,
+				Medium:   300,
+				High:     700,
+				Critical: 1300,
 			},
 			DNSRTTMS: DNSRTTThresholds{
-				Medium:   150,
-				High:     400,
-				Critical: 1000,
+				Medium:   400,
+				High:     600,
+				Critical: 1200,
 			},
 			IncompleteHandshakes: IncompleteHandshakeThresholds{
-				Medium: 0.20,
-				High:   0.15,
+				Medium: 0.10,
+				High:   0.20,
 			},
 			TCPResets: TCPResetThresholds{
-				Medium: 5.0,
-				High:   20.0,
+				Medium:   5.0,
+				High:     50.0,
+				Critical: 100,
 			},
 			Retransmissions: RetransmissionThresholds{
-				Medium:   0.02,
+				Medium:   0.04,
 				High:     0.08,
 				Critical: 0.10,
 			},
 			DNSFailures: DNSFailureThresholds{
-				Medium:   0.05,
-				High:     0.10,
+				Medium:   0.02,
+				High:     0.05,
 				Critical: 25,
 			},
 		}
 	case ProfileWAN:
 		return Thresholds{
 			HandshakeRTTMS: HandshakeRTTThresholds{
-				Medium:   800,
-				High:     1500,
-				Critical: 3000,
+				Medium:   1000,
+				High:     2000,
+				Critical: 3500,
 			},
 			DNSRTTMS: DNSRTTThresholds{
-				Medium:   400,
-				High:     900,
-				Critical: 2000,
+				Medium:   800,
+				High:     1200,
+				Critical: 2500,
 			},
 			IncompleteHandshakes: IncompleteHandshakeThresholds{
-				Medium: 0.20,
-				High:   0.15,
+				Medium: 0.10,
+				High:   0.20,
 			},
 			TCPResets: TCPResetThresholds{
-				Medium: 5.0,
-				High:   20.0,
+				Medium:   5.0,
+				High:     50.0,
+				Critical: 100,
 			},
 			Retransmissions: RetransmissionThresholds{
-				Medium:   0.02,
+				Medium:   0.04,
 				High:     0.08,
 				Critical: 0.10,
 			},
 			DNSFailures: DNSFailureThresholds{
-				Medium:   0.05,
-				High:     0.10,
+				Medium:   0.02,
+				High:     0.05,
 				Critical: 25,
 			},
 		}
@@ -218,6 +221,9 @@ func ComputeSeverityForIncompleteHandshakes(count int, rate float64, thresh Inco
 }
 
 func ComputeSeverityForTCPResets(count int, ratePer1kFlows float64, thresh TCPResetThresholds) Severity {
+	if count >= thresh.Critical || ratePer1kFlows >= 20.0 {
+		return SeverityHigh
+	}
 	if count >= 50 || ratePer1kFlows >= 20.0 {
 		return SeverityHigh
 	}
@@ -237,11 +243,11 @@ func ComputeSeverityForRetransmissions(rate float64, thresh RetransmissionThresh
 	if rate >= 0.08 {
 		return SeverityHigh
 	}
-	if rate >= 0.02 {
-		return SeverityMedium
-	}
 	if rate > 0.04 {
 		return SeverityLow
+	}
+	if rate >= 0.02 {
+		return SeverityMedium
 	}
 	return SeverityInfo
 }
