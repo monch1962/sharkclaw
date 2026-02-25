@@ -113,6 +113,38 @@ func TestComputeSeverityForHandshakeRTT(t *testing.T) {
 			thresh:   HandshakeRTTThresholds{Medium: 200, High: 500, Critical: 1200},
 			expected: SeverityCritical,
 		},
+		{
+			name:     "High severity with p95 boundary",
+			p50:      300,
+			p95:      500,
+			p99:      1000,
+			thresh:   HandshakeRTTThresholds{Medium: 200, High: 500, Critical: 1200},
+			expected: SeverityHigh,
+		},
+		{
+			name:     "Medium severity with p50 boundary",
+			p50:      200,
+			p95:      500,
+			p99:      1000,
+			thresh:   HandshakeRTTThresholds{Medium: 200, High: 500, Critical: 1200},
+			expected: SeverityMedium,
+		},
+		{
+			name:     "Low severity with p50 below threshold",
+			p50:      100,
+			p95:      400,
+			p99:      800,
+			thresh:   HandshakeRTTThresholds{Medium: 200, High: 500, Critical: 1200},
+			expected: SeverityLow,
+		},
+		{
+			name:     "Info severity with all values low",
+			p50:      50,
+			p95:      300,
+			p99:      600,
+			thresh:   HandshakeRTTThresholds{Medium: 200, High: 500, Critical: 1200},
+			expected: SeverityInfo,
+		},
 	}
 
 	for _, tt := range tests {

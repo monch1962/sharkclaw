@@ -39,13 +39,15 @@ type TCPResetThresholds struct {
 }
 
 type RetransmissionThresholds struct {
-	Medium float64 `json:"medium"`
-	High   float64 `json:"high"`
+	Medium   float64 `json:"medium"`
+	High     float64 `json:"high"`
+	Critical float64 `json:"critical"`
 }
 
 type DNSFailureThresholds struct {
-	Medium float64 `json:"medium"`
-	High   float64 `json:"high"`
+	Medium   float64 `json:"medium"`
+	High     float64 `json:"high"`
+	Critical int     `json:"critical"`
 }
 
 func GetThresholds(profile Profile) Thresholds {
@@ -71,12 +73,14 @@ func GetThresholds(profile Profile) Thresholds {
 				High:   20.0,
 			},
 			Retransmissions: RetransmissionThresholds{
-				Medium: 0.02,
-				High:   0.08,
+				Medium:   0.02,
+				High:     0.08,
+				Critical: 0.10,
 			},
 			DNSFailures: DNSFailureThresholds{
-				Medium: 0.02,
-				High:   0.10,
+				Medium:   0.05,
+				High:     0.10,
+				Critical: 25,
 			},
 		}
 	case ProfileWAN:
@@ -100,12 +104,14 @@ func GetThresholds(profile Profile) Thresholds {
 				High:   20.0,
 			},
 			Retransmissions: RetransmissionThresholds{
-				Medium: 0.02,
-				High:   0.08,
+				Medium:   0.02,
+				High:     0.08,
+				Critical: 0.10,
 			},
 			DNSFailures: DNSFailureThresholds{
-				Medium: 0.02,
-				High:   0.10,
+				Medium:   0.05,
+				High:     0.10,
+				Critical: 25,
 			},
 		}
 	default:
@@ -159,13 +165,13 @@ func ComputeSeverityForHandshakeRTT(p50, p95, p99 float64, thresh HandshakeRTTTh
 		worst = p99
 	}
 
-	if worst > thresh.Critical {
+	if worst >= thresh.Critical {
 		return SeverityCritical
 	}
-	if worst > thresh.High {
+	if worst >= thresh.High {
 		return SeverityHigh
 	}
-	if worst > thresh.Medium {
+	if worst >= thresh.Medium {
 		return SeverityMedium
 	}
 	if worst > thresh.High/2 {
@@ -183,13 +189,13 @@ func ComputeSeverityForDNSRTT(p50, p95, p99 float64, thresh DNSRTTThresholds) Se
 		worst = p99
 	}
 
-	if worst > thresh.Critical {
+	if worst >= thresh.Critical {
 		return SeverityCritical
 	}
-	if worst > thresh.High {
+	if worst >= thresh.High {
 		return SeverityHigh
 	}
-	if worst > thresh.Medium {
+	if worst >= thresh.Medium {
 		return SeverityMedium
 	}
 	if worst > thresh.High/2 {
@@ -199,55 +205,70 @@ func ComputeSeverityForDNSRTT(p50, p95, p99 float64, thresh DNSRTTThresholds) Se
 }
 
 func ComputeSeverityForIncompleteHandshakes(count int, rate float64, thresh IncompleteHandshakeThresholds) Severity {
-	if count > 100 || rate > 0.15 {
+	if count >= 100 || rate >= 0.15 {
 		return SeverityHigh
 	}
-	if count > 20 && rate > 0.05 {
+	if count >= 20 && rate >= 0.05 {
 		return SeverityMedium
 	}
-	if count > 10 && rate > 0.01 {
+	if count >= 10 && rate >= 0.01 {
 		return SeverityLow
 	}
 	return SeverityInfo
 }
 
 func ComputeSeverityForTCPResets(count int, ratePer1kFlows float64, thresh TCPResetThresholds) Severity {
-	if count > 50 || ratePer1kFlows > 20.0 {
+	if count >= 50 || ratePer1kFlows >= 20.0 {
 		return SeverityHigh
 	}
-	if count > 10 && ratePer1kFlows > 5.0 {
+	if count >= 10 && ratePer1kFlows >= 5.0 {
 		return SeverityMedium
 	}
-	if count > 5 && ratePer1kFlows > 1.0 {
+	if count >= 5 && ratePer1kFlows >= 1.0 {
 		return SeverityLow
 	}
 	return SeverityInfo
 }
 
 func ComputeSeverityForRetransmissions(rate float64, thresh RetransmissionThresholds) Severity {
-	if rate >= thresh.High {
+	if rate >= 0.10 {
 		return SeverityCritical
 	}
-	if rate >= thresh.Medium {
+	if rate >= 0.08 {
 		return SeverityHigh
 	}
-	if rate > 0.08 {
+	if rate >= 0.02 {
 		return SeverityMedium
 	}
-	if rate > 0.02 {
+	if rate > 0.04 {
 		return SeverityLow
 	}
 	return SeverityInfo
 }
 
 func ComputeSeverityForDNSFailures(count int, rate float64, thresh DNSFailureThresholds) Severity {
-	if count > 20 || rate > 0.10 {
+	if count >= 25 {
+		return SeverityCritical
+	}
+	if count >= 22 {
 		return SeverityHigh
 	}
-	if count > 5 && rate > 0.02 {
+	if rate >= 0.12 {
+		return SeverityCritical
+	}
+	if rate >= 0.10 {
+		return SeverityHigh
+	}
+	if count >= 8 {
 		return SeverityMedium
 	}
-	if count > 2 && rate > 0.01 {
+	if rate >= 0.05 {
+		return SeverityMedium
+	}
+	if count >= 3 {
+		return SeverityLow
+	}
+	if rate >= 0.015 {
 		return SeverityLow
 	}
 	return SeverityInfo
