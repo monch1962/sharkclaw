@@ -5,7 +5,7 @@ SharkClaw is a production-quality Go CLI tool that detects and counts "weird" ne
 ## Features
 
 - Analyze PCAP/PCAPNG files
-- Capture live traffic with configurable duration
+- Capture live network traffic with configurable duration
 - Detect high-latency flows (p50, p95, p99 latency metrics)
 - Monitor TCP reliability hints (retransmissions, duplicate ACKs, resets)
 - Detect incomplete TCP handshakes
@@ -13,6 +13,7 @@ SharkClaw is a production-quality Go CLI tool that detects and counts "weird" ne
 - Detect DNS failures (NXDOMAIN, SERVFAIL, timeouts)
 - Identify top talkers (sources and destinations)
 - Configurable profiles (LAN/WAN) with custom thresholds
+- Uses real PCAP capture (requires CAP_NET_RAW on Linux)
 
 ## Installation
 
