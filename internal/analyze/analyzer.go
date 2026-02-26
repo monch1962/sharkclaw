@@ -178,11 +178,6 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 			IncludeTopN:     a.includeTopN,
 			TotalPackets:    totalPackets,
 		},
-		Summary: AnalysisSummary{
-			SchemaVersion:    "1.0.0",
-			SignalsTriggered: 0,
-			Severity:         summarySeverity.String(),
-		},
 		Metrics: Metrics{
 			TCPMetrics: TCPMetrics{
 				SynTotal: a.calculateSynTotal(packets),
@@ -436,11 +431,10 @@ func (a *Analyzer) AnalyzeCapture(packets []Packet, iface string, duration time.
 
 // AnalysisResult contains the analysis results
 type AnalysisResult struct {
-	Run        RunData         `json:"run"`
-	Summary    AnalysisSummary `json:"summary"`
-	Metrics    Metrics         `json:"metrics"`
-	TopTalkers TopTalkers      `json:"top_talkers"`
-	Errors     []Error         `json:"errors"`
+	Run        RunData    `json:"run"`
+	Metrics    Metrics    `json:"metrics"`
+	TopTalkers TopTalkers `json:"top_talkers"`
+	Errors     []Error    `json:"errors"`
 }
 
 // RunData contains execution data
@@ -457,7 +451,6 @@ type RunData struct {
 
 // AnalysisSummary contains summary of the analysis
 type AnalysisSummary struct {
-	SchemaVersion    string `json:"schema_version"`
 	SignalsTriggered int    `json:"signals_triggered"`
 	Severity         string `json:"severity"`
 }

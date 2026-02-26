@@ -140,7 +140,6 @@ func runCaptureMode(cmd *cli.Command) error {
 		// Create a new result without top_talkers when not verbose
 		verboseResult := map[string]interface{}{
 			"run":     result.Run,
-			"summary": result.Summary,
 			"metrics": result.Metrics,
 			"errors":  result.Errors,
 		}
@@ -205,6 +204,7 @@ func runPcapMode(cmd *cli.Command) error {
 	result.Run.EndTime = endTime
 	result.Run.Mode = "pcap"
 	result.Run.DurationSeconds = float64(len(packets))
+	result.Run.TotalPackets = len(packets)
 
 	jsonData, err := json.Marshal(result)
 	if err != nil {
