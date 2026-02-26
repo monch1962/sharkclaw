@@ -129,9 +129,25 @@ func runCaptureMode(cmd *cli.Command) error {
 	result.Run.Mode = "capture"
 	result.Run.DurationSeconds = duration.Seconds()
 
-	jsonData, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("failed to marshal result: %w", err)
+	var jsonData []byte
+	if cmd.Run.Verbose {
+		// Include top_talkers when verbose
+		jsonData, err = json.Marshal(result)
+		if err != nil {
+			return fmt.Errorf("failed to marshal result: %w", err)
+		}
+	} else {
+		// Create a new result without top_talkers when not verbose
+		verboseResult := map[string]interface{}{
+			"run":     result.Run,
+			"summary": result.Summary,
+			"metrics": result.Metrics,
+			"errors":  result.Errors,
+		}
+		jsonData, err = json.Marshal(verboseResult)
+		if err != nil {
+			return fmt.Errorf("failed to marshal result: %w", err)
+		}
 	}
 
 	os.Stdout.WriteString(string(jsonData))
