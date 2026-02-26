@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	cli "github.com/sharkclaw/sharkclaw/internal/cli"
 	analyze "github.com/sharkclaw/sharkclaw/internal/analyze"
 	"github.com/sharkclaw/sharkclaw/internal/capture"
+	cli "github.com/sharkclaw/sharkclaw/internal/cli"
 	"github.com/sharkclaw/sharkclaw/internal/pcap"
 )
 
@@ -85,8 +85,14 @@ func runCaptureMode(cmd *cli.Command) error {
 
 	packets := make([]analyze.Packet, 0)
 
+	// Use "any" interface if none specified (like tcpdump)
+	iface := cmd.Interface
+	if iface == "" {
+		iface = "any"
+	}
+
 	if duration > 0 {
-		capturer, err := capture.NewCapturer(cmd.Interface, cmd.BPF, 100*time.Millisecond)
+		capturer, err := capture.NewCapturer(iface, cmd.BPF, 100*time.Millisecond)
 		if err != nil {
 			return fmt.Errorf("failed to create capturer: %w", err)
 		}
@@ -98,7 +104,7 @@ func runCaptureMode(cmd *cli.Command) error {
 		}
 		packets = capture.Convert(capturePackets)
 	} else {
-		capturer, err := capture.NewCapturer(cmd.Interface, cmd.BPF, 100*time.Millisecond)
+		capturer, err := capture.NewCapturer(iface, cmd.BPF, 100*time.Millisecond)
 		if err != nil {
 			return fmt.Errorf("failed to create capturer: %w", err)
 		}
