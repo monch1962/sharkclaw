@@ -236,27 +236,29 @@ func (a *Analyzer) trackTCPHandshake(pkt Packet, tcpHandshakes map[string]*TCPHa
 	}
 
 	// Track handshake state
-	if pkt.SYN && !tcpHandshakes[flowKey].SYN {
-		tcpHandshakes[flowKey] = &TCPHandshake{
-			SYN:       true,
-			Timestamp: pkt.Timestamp,
+	if tcpHandshake, exists := tcpHandshakes[flowKey]; exists {
+		if pkt.SYN && !tcpHandshake.SYN {
+			tcpHandshakes[flowKey] = &TCPHandshake{
+				SYN:       true,
+				Timestamp: pkt.Timestamp,
+			}
+			flows[flowKey].FirstSYN = pkt.Timestamp
 		}
-		flows[flowKey].FirstSYN = pkt.Timestamp
-	}
 
-	if pkt.SYN && pkt.ACK && !tcpHandshakes[flowKey].SYNACKSeen {
-		// Calculate handshake RTT
-		handshakeRTT := pkt.Timestamp.Sub(flows[flowKey].FirstSYN).Milliseconds()
-		a.handshakeRTT = append(a.handshakeRTT, handshakeRTT)
+		if pkt.SYN && pkt.ACK && !tcpHandshake.SYNACKSeen {
+			// Calculate handshake RTT
+			handshakeRTT := pkt.Timestamp.Sub(flows[flowKey].FirstSYN).Milliseconds()
+			a.handshakeRTT = append(a.handshakeRTT, handshakeRTT)
 
-		tcpHandshakes[flowKey].SYNACKSeen = true
-		flows[flowKey].ACKSeen = true
-		flows[flowKey].HandshakeComplete = true
-	}
+			tcpHandshakes[flowKey].SYNACKSeen = true
+			flows[flowKey].ACKSeen = true
+			flows[flowKey].HandshakeComplete = true
+		}
 
-	if pkt.ACK && tcpHandshakes[flowKey].SYN && tcpHandshakes[flowKey].SYNACKSeen && !tcpHandshakes[flowKey].ACKSeen {
-		tcpHandshakes[flowKey].ACKSeen = true
-		flows[flowKey].HandshakeComplete = true
+		if pkt.ACK && tcpHandshake.SYN && tcpHandshake.SYNACKSeen && !tcpHandshake.ACKSeen {
+			tcpHandshakes[flowKey].ACKSeen = true
+			flows[flowKey].HandshakeComplete = true
+		}
 	}
 
 	// Detect retransmissions (same sequence number as previous packet)
