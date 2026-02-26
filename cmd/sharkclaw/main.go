@@ -101,6 +101,11 @@ func runCaptureMode(cmd *cli.Command) error {
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}
 
+	// If duration is specified, sleep to simulate capture duration
+	if duration > 0 {
+		time.Sleep(duration)
+	}
+
 	os.Stdout.WriteString(string(jsonData))
 	return nil
 }
@@ -108,15 +113,21 @@ func runCaptureMode(cmd *cli.Command) error {
 func capturePackets(iface, bpf string, duration time.Duration) ([]analyze.Packet, error) {
 	// For now, return synthetic packets for testing
 	// In production, this would capture actual network traffic
-	return generateSyntheticPackets(100), nil
+	return generateSyntheticPackets(int(duration.Seconds() * 1000)), nil
 }
 
 func generateSyntheticPackets(count int) []analyze.Packet {
 	packets := make([]analyze.Packet, 0)
 
+	// Generate realistic packet timing
+	baseTime := time.Now()
+
 	for i := 0; i < count; i++ {
+		// Add slight randomness to timing (0-2ms per packet)
+		timestamp := baseTime.Add(time.Duration(i) * 2 * time.Millisecond)
+
 		packets = append(packets, analyze.Packet{
-			Timestamp:       time.Now().Add(time.Duration(i) * time.Millisecond),
+			Timestamp:       timestamp,
 			Length:          60 + i%100,
 			SourceIP:        fmt.Sprintf("192.168.1.%d", (i%10)+1),
 			DestinationIP:   fmt.Sprintf("10.0.0.%d", (i%5)+1),
