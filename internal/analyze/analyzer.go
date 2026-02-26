@@ -167,11 +167,6 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 	destinations := a.calculateTopTalkers(packets, a.flows, "destinations")
 
 	result := &AnalysisResult{
-		SchemaVersion: "1.0.0",
-		Tool: ToolInfo{
-			Name:    "sharkclaw",
-			Version: "dev",
-		},
 		Run: RunData{
 			Mode:            "pcap",
 			StartTime:       packets[0].Timestamp,
@@ -438,19 +433,11 @@ func (a *Analyzer) AnalyzeCapture(packets []Packet, iface string, duration time.
 
 // AnalysisResult contains the analysis results
 type AnalysisResult struct {
-	SchemaVersion string          `json:"schema_version"`
-	Tool          ToolInfo        `json:"tool"`
-	Run           RunData         `json:"run"`
-	Summary       AnalysisSummary `json:"summary"`
-	Metrics       Metrics         `json:"metrics"`
-	TopTalkers    TopTalkers      `json:"top_talkers"`
-	Errors        []Error         `json:"errors"`
-}
-
-// ToolInfo contains tool metadata
-type ToolInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Run        RunData         `json:"run"`
+	Summary    AnalysisSummary `json:"summary"`
+	Metrics    Metrics         `json:"metrics"`
+	TopTalkers TopTalkers      `json:"top_talkers"`
+	Errors     []Error         `json:"errors"`
 }
 
 // RunData contains execution data

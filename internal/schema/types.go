@@ -185,6 +185,7 @@ type Run struct {
 	// Duration is kept for compatibility but should not be used in new code
 	Duration    time.Duration `json:"-"`
 	Pretty      bool          `json:"pretty"`
+	Verbose     bool          `json:"verbose"`
 	IncludeTopN int           `json:"include_topN"`
 	Help        *Help         `json:"help"`
 }
@@ -216,14 +217,12 @@ type SignalInfo struct {
 }
 
 type Result struct {
-	SchemaVersion string     `json:"schema_version"`
-	Tool          ToolInfo   `json:"tool"`
-	Run           Run        `json:"run"`
-	Summary       Summary    `json:"summary"`
-	Metrics       Metrics    `json:"metrics"`
-	TopTalkers    TopTalkers `json:"top_talkers"`
-	Errors        []Error    `json:"errors"`
-	Help          Help       `json:"help"`
+	Run        Run        `json:"run"`
+	Summary    Summary    `json:"summary"`
+	Metrics    Metrics    `json:"metrics"`
+	TopTalkers TopTalkers `json:"top_talkers,omitempty"`
+	Errors     []Error    `json:"errors"`
+	Help       Help       `json:"help"`
 }
 
 type ToolInfo struct {
@@ -233,11 +232,6 @@ type ToolInfo struct {
 
 func NewResult(mode RunMode, profile string, startTime, endTime time.Time, durationSeconds float64) Result {
 	return Result{
-		SchemaVersion: SchemaVersion,
-		Tool: ToolInfo{
-			Name:    ToolName,
-			Version: "dev", // Will be set via ldflags
-		},
 		Run: Run{
 			Mode:            mode,
 			StartTime:       startTime.UTC(),
@@ -560,10 +554,6 @@ func (r *Result) SetCaptureInterface(iface string) {
 
 func (r *Result) SetCaptureBPF(bpf string) {
 	r.Run.Capture.BPF = bpf
-}
-
-func (r *Result) SetVersion(version string) {
-	r.Tool.Version = version
 }
 
 func (r *Result) AddSourceTopTalkers(limit int) {

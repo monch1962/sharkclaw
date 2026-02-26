@@ -105,11 +105,13 @@ func parseCaptureMode(args []string) (*Command, error) {
 	var profile string
 	var pretty bool
 	var includeTopN int
+	var verbose bool
 
 	f.StringVar(&iface, "iface", "", "Network interface")
 	f.StringVar(&filter, "filter", "", "BPF filter")
 	f.StringVar(&profile, "profile", "wan", "Threshold profile (lan|wan)")
 	f.BoolVar(&pretty, "pretty", false, "Output pretty-printed JSON")
+	f.BoolVar(&verbose, "verbose", false, "Show top talkers in output")
 	f.IntVar(&includeTopN, "include-topN", 5, "Limit top talkers to N entries (0 disables)")
 
 	if err := f.Parse(args); err != nil {
@@ -147,6 +149,7 @@ func parseCaptureMode(args []string) (*Command, error) {
 	}
 
 	run.EndTime = run.StartTime.Add(run.Duration)
+	run.Verbose = verbose
 
 	cmd := &Command{Run: run}
 	if iface != "" {
