@@ -6,14 +6,25 @@ import (
 	"time"
 
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 )
 
 // Packet represents a network packet
 type Packet struct {
-	Timestamp time.Time
-	Length    int
-	// TODO: Add more packet fields like source IP, destination IP, ports, protocol
+	Timestamp       time.Time
+	Length          int
+	SourceIP        string
+	DestinationIP   string
+	SourcePort      int
+	DestinationPort int
+	Protocol        string
+	SYN             bool
+	ACK             bool
+	RST             bool
+	SeqNumber       uint32
+	AckNumber       uint32
+	// TODO: Add more fields as needed (flags, payload size, etc.)
 }
 
 // Reader reads packets from a PCAP file
@@ -23,7 +34,6 @@ type Reader struct {
 	snapshot int
 }
 
-// NewReader creates a new PCAP reader
 // NewReader creates a new PCAP reader
 func NewReader(path string) (*Reader, error) {
 	if path == "" {
@@ -56,13 +66,59 @@ func (r *Reader) Read() ([]Packet, error) {
 			break
 		}
 
-		packets = append(packets, Packet{
-			Timestamp: packet.Metadata().Timestamp,
-			Length:    packet.Metadata().Length,
-		})
+		packet := extractPacketFields(packet)
+		packets = append(packets, packet)
 	}
 
 	return packets, nil
+}
+
+// extractPacketFields extracts detailed packet fields from gopacket
+func extractPacketFields(packet gopacket.Packet) Packet {
+	var result Packet
+
+	// Extract metadata
+	result.Timestamp = packet.Metadata().Timestamp
+	result.Length = packet.Metadata().Length
+
+	// Extract IP layer
+	if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
+		ipv4 := ipv4Layer.(*layers.IPv4)
+		result.SourceIP = ipv4.SrcIP.String()
+		result.DestinationIP = ipv4.DstIP.String()
+	}
+
+	if ipv6Layer := packet.Layer(layers.LayerTypeIPv6); ipv6Layer != nil {
+		ipv6 := ipv6Layer.(*layers.IPv6)
+		result.SourceIP = ipv6.SrcIP.String()
+		result.DestinationIP = ipv6.DstIP.String()
+	}
+
+	// Extract transport layer
+	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+		tcp := tcpLayer.(*layers.TCP)
+
+		result.Protocol = "TCP"
+		result.SourcePort = int(tcp.SrcPort)
+		result.DestinationPort = int(tcp.DstPort)
+		result.SYN = tcp.SYN
+		result.ACK = tcp.ACK
+		result.RST = tcp.RST
+		// TODO: Extract sequence and acknowledgment numbers when available
+	} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+		udp := udpLayer.(*layers.UDP)
+
+		result.Protocol = "UDP"
+		result.SourcePort = int(udp.SrcPort)
+		result.DestinationPort = int(udp.DstPort)
+	}
+
+	// Extract payload size if needed
+	if len(packet.Data()) > 0 {
+		result.Length = len(packet.Data())
+	}
+
+	return result
 }
 
 // CountPackets counts the total number of packets in the PCAP file
