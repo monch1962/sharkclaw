@@ -182,10 +182,11 @@ type Run struct {
 	Input           Input         `json:"input"`
 	Capture         CaptureConfig `json:"capture"`
 	Profile         string        `json:"profile"`
-	Duration        time.Duration `json:"duration"`
-	Pretty          bool          `json:"pretty"`
-	IncludeTopN     int           `json:"include_topN"`
-	Help            *Help         `json:"help"`
+	// Duration is kept for compatibility but should not be used in new code
+	Duration    time.Duration `json:"-"`
+	Pretty      bool          `json:"pretty"`
+	IncludeTopN int           `json:"include_topN"`
+	Help        *Help         `json:"help"`
 }
 
 type Help struct {
