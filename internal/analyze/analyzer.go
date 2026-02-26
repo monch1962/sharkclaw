@@ -186,7 +186,7 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 					RatePercent: ratePercent,
 					Severity:    incompleteSeverity.String(),
 				},
-				Rets: ResetMetrics{
+				Resets: ResetMetrics{
 					Count: a.calculateTCPResets(packets),
 				},
 				ReliabilityHints: ReliabilityHints{
@@ -364,6 +364,61 @@ func (a *Analyzer) computeSeverityForIncompleteHandshakes(count int, ratePercent
 	return thresholds.ComputeSeverityForIncompleteHandshakes(count, ratePercent, a.thresh.IncompleteHandshakes)
 }
 
+// computeSeverityForTCPResets calculates severity for TCP resets
+func (a *Analyzer) computeSeverityForTCPResets(count int, ratePer1kFlows float64) thresholds.Severity {
+	return thresholds.ComputeSeverityForTCPResets(count, ratePer1kFlows, a.thresh.TCPResets)
+}
+
+// computeSeverityForRetransmissions calculates severity for retransmissions
+func (a *Analyzer) computeSeverityForRetransmissions(rate float64) thresholds.Severity {
+	return thresholds.ComputeSeverityForRetransmissions(rate, a.thresh.Retransmissions)
+}
+
+// computeSeverityForDuplicateACKs calculates severity for duplicate ACKs
+func (a *Analyzer) computeSeverityForDuplicateACKs(count int, ratePercent float64) thresholds.Severity {
+	// Duplicate ACK severity is similar to retransmission severity
+	if ratePercent >= 10.0 {
+		return thresholds.SeverityCritical
+	}
+	if ratePercent >= 5.0 {
+		return thresholds.SeverityHigh
+	}
+	if ratePercent >= 2.0 {
+		return thresholds.SeverityMedium
+	}
+	if ratePercent >= 1.0 {
+		return thresholds.SeverityLow
+	}
+	return thresholds.SeverityInfo
+}
+
+// computeSeverityForDNSFailures calculates severity for DNS failures
+func (a *Analyzer) computeSeverityForDNSFailures(count int, rate float64) thresholds.Severity {
+	return thresholds.ComputeSeverityForDNSFailures(count, rate, a.thresh.DNSFailures)
+}
+
+// computeSeverityForHandshakeRTT calculates severity for handshake RTT
+func (a *Analyzer) computeSeverityForHandshakeRTT(sortedRTT []int64) thresholds.Severity {
+	if len(sortedRTT) == 0 {
+		return thresholds.SeverityInfo
+	}
+	p50 := float64(sortedRTT[len(sortedRTT)*50/100])
+	p95 := float64(sortedRTT[len(sortedRTT)*95/100])
+	p99 := float64(sortedRTT[len(sortedRTT)*99/100])
+	return thresholds.ComputeSeverityForHandshakeRTT(p50, p95, p99, a.thresh.HandshakeRTTMS)
+}
+
+// computeSeverityForDNSRTT calculates severity for DNS RTT
+func (a *Analyzer) computeSeverityForDNSRTT(sortedRTT []int64) thresholds.Severity {
+	if len(sortedRTT) == 0 {
+		return thresholds.SeverityInfo
+	}
+	p50 := float64(sortedRTT[len(sortedRTT)*50/100])
+	p95 := float64(sortedRTT[len(sortedRTT)*95/100])
+	p99 := float64(sortedRTT[len(sortedRTT)*99/100])
+	return thresholds.ComputeSeverityForDNSRTT(p50, p95, p99, a.thresh.DNSRTTMS)
+}
+
 // calculateLatency calculates latency statistics (p50, p95, p99)
 func (a *Analyzer) calculateLatency(latencies []int64) LatencyMetrics {
 	if len(latencies) == 0 {
@@ -458,14 +513,16 @@ type AnalysisSummary struct {
 // Metrics contains network metrics
 type Metrics struct {
 	TCPMetrics TCPMetrics `json:"tcp_metrics"`
+	DNSMetrics DNSMetrics `json:"dns_metrics"`
 }
 
 // TCPMetrics contains TCP-specific metrics
 type TCPMetrics struct {
 	SynTotal             int                        `json:"syn_total"`
 	IncompleteHandshakes IncompleteHandshakeMetrics `json:"incomplete_handshakes"`
-	Rets                 ResetMetrics               `json:"resets"`
+	Resets               ResetMetrics               `json:"resets"`
 	ReliabilityHints     ReliabilityHints           `json:"reliability_hints"`
+	Latency              LatencyMetrics             `json:"latency"`
 }
 
 // IncompleteHandshakeMetrics tracks incomplete TCP handshakes
@@ -477,7 +534,23 @@ type IncompleteHandshakeMetrics struct {
 
 // ResetMetrics tracks TCP resets
 type ResetMetrics struct {
-	Count int `json:"count"`
+	Count       int     `json:"count"`
+	RatePercent float64 `json:"rate_percent"`
+	Severity    string  `json:"severity"`
+}
+
+// RetransmissionMetrics tracks TCP retransmissions
+type RetransmissionMetrics struct {
+	Count       int     `json:"count"`
+	RatePercent float64 `json:"rate_percent"`
+	Severity    string  `json:"severity"`
+}
+
+// DuplicateACKMetrics tracks duplicate ACKs
+type DuplicateACKMetrics struct {
+	Count       int     `json:"count"`
+	RatePercent float64 `json:"rate_percent"`
+	Severity    string  `json:"severity"`
 }
 
 // ReliabilityHints contains TCP reliability metrics
@@ -486,20 +559,27 @@ type ReliabilityHints struct {
 	DupACKs         DuplicateACKMetrics   `json:"dup_acks"`
 }
 
-// RetransmissionMetrics tracks TCP retransmissions
-type RetransmissionMetrics struct {
-	Count int `json:"count"`
+// DNSMetrics contains DNS-specific metrics
+type DNSMetrics struct {
+	Queries      int               `json:"queries"`
+	Failures     FailureMetrics    `json:"failures"`
+	LatencyRTTms LatencyRTTMetrics `json:"latency_rtt_ms"`
 }
 
-// DuplicateACKMetrics tracks duplicate ACKs
-type DuplicateACKMetrics struct {
-	Count int `json:"count"`
+// FailureMetrics contains DNS failure metrics
+type FailureMetrics struct {
+	Count       int     `json:"count"`
+	RatePercent float64 `json:"rate_percent"`
+	Severity    string  `json:"severity"`
 }
 
-// TopTalkers contains top talker data
-type TopTalkers struct {
-	Sources      []TopTalker `json:"sources"`
-	Destinations []TopTalker `json:"destinations"`
+// LatencyRTTMetrics contains DNS RTT statistics
+type LatencyRTTMetrics struct {
+	P50            int    `json:"p50"`
+	P95            int    `json:"p95"`
+	P99            int    `json:"p99"`
+	AboveThreshold int    `json:"above_threshold"`
+	Severity       string `json:"severity"`
 }
 
 // TopTalker represents a network entity
@@ -513,4 +593,10 @@ type TopTalker struct {
 type Error struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// TopTalkers contains top talker data
+type TopTalkers struct {
+	Sources      []TopTalker `json:"sources"`
+	Destinations []TopTalker `json:"destinations"`
 }
