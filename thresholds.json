@@ -1,0 +1,66 @@
+{
+  "profiles": {
+    "lan": {
+      "handshake_rtt_ms": {
+        "medium": 200,
+        "high": 500,
+        "critical": 1200
+      },
+      "dns_rtt_ms": {
+        "medium": 150,
+        "high": 400,
+        "critical": 1000
+      },
+      "incomplete_handshakes": {
+        "medium": 0.10,
+        "high": 0.20
+      },
+      "tcp_resets": {
+        "medium": 5.0,
+        "high": 50.0,
+        "critical": 100
+      },
+      "retransmissions": {
+        "medium": 0.04,
+        "high": 0.08,
+        "critical": 0.10
+      },
+      "dns_failures": {
+        "medium": 0.02,
+        "high": 0.05,
+        "critical": 25
+      }
+    },
+    "wan": {
+      "handshake_rtt_ms": {
+        "medium": 800,
+        "high": 1500,
+        "critical": 3500
+      },
+      "dns_rtt_ms": {
+        "medium": 400,
+        "high": 900,
+        "critical": 2500
+      },
+      "incomplete_handshakes": {
+        "medium": 0.10,
+        "high": 0.20
+      },
+      "tcp_resets": {
+        "medium": 5.0,
+        "high": 50.0,
+        "critical": 100
+      },
+      "retransmissions": {
+        "medium": 0.04,
+        "high": 0.08,
+        "critical": 0.10
+      },
+      "dns_failures": {
+        "medium": 0.02,
+        "high": 0.05,
+        "critical": 25
+      }
+    }
+  }
+}

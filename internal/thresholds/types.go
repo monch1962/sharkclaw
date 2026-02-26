@@ -16,6 +16,72 @@ type Thresholds struct {
 	DNSFailures          DNSFailureThresholds          `json:"dns_failures"`
 }
 
+// Default thresholds for backward compatibility
+var defaults = map[Profile]Thresholds{
+	ProfileLAN: {
+		HandshakeRTTMS: HandshakeRTTThresholds{
+			Medium:   200,
+			High:     500,
+			Critical: 1200,
+		},
+		DNSRTTMS: DNSRTTThresholds{
+			Medium:   150,
+			High:     400,
+			Critical: 1000,
+		},
+		IncompleteHandshakes: IncompleteHandshakeThresholds{
+			Medium: 0.10,
+			High:   0.20,
+		},
+		TCPResets: TCPResetThresholds{
+			Medium:   5.0,
+			High:     50.0,
+			Critical: 100,
+		},
+		Retransmissions: RetransmissionThresholds{
+			Medium:   0.04,
+			High:     0.08,
+			Critical: 0.10,
+		},
+		DNSFailures: DNSFailureThresholds{
+			Medium:   0.02,
+			High:     0.05,
+			Critical: 25,
+		},
+	},
+	ProfileWAN: {
+		HandshakeRTTMS: HandshakeRTTThresholds{
+			Medium:   800,
+			High:     1500,
+			Critical: 3500,
+		},
+		DNSRTTMS: DNSRTTThresholds{
+			Medium:   400,
+			High:     900,
+			Critical: 2500,
+		},
+		IncompleteHandshakes: IncompleteHandshakeThresholds{
+			Medium: 0.10,
+			High:   0.20,
+		},
+		TCPResets: TCPResetThresholds{
+			Medium:   5.0,
+			High:     50.0,
+			Critical: 100,
+		},
+		Retransmissions: RetransmissionThresholds{
+			Medium:   0.04,
+			High:     0.08,
+			Critical: 0.10,
+		},
+		DNSFailures: DNSFailureThresholds{
+			Medium:   0.02,
+			High:     0.05,
+			Critical: 25,
+		},
+	},
+}
+
 type HandshakeRTTThresholds struct {
 	Medium   float64 `json:"medium"`
 	High     float64 `json:"high"`
@@ -52,74 +118,14 @@ type DNSFailureThresholds struct {
 }
 
 func GetThresholds(profile Profile) Thresholds {
-	switch profile {
-	case ProfileLAN:
-		return Thresholds{
-			HandshakeRTTMS: HandshakeRTTThresholds{
-				Medium:   200,
-				High:     500,
-				Critical: 1200,
-			},
-			DNSRTTMS: DNSRTTThresholds{
-				Medium:   150,
-				High:     400,
-				Critical: 1000,
-			},
-			IncompleteHandshakes: IncompleteHandshakeThresholds{
-				Medium: 0.10,
-				High:   0.20,
-			},
-			TCPResets: TCPResetThresholds{
-				Medium:   5.0,
-				High:     50.0,
-				Critical: 100,
-			},
-			Retransmissions: RetransmissionThresholds{
-				Medium:   0.04,
-				High:     0.08,
-				Critical: 0.10,
-			},
-			DNSFailures: DNSFailureThresholds{
-				Medium:   0.02,
-				High:     0.05,
-				Critical: 25,
-			},
+	thresh, err := LoadFromConfig(profile)
+	if err != nil {
+		if profile == ProfileWAN || profile == ProfileLAN {
+			return defaults[profile]
 		}
-	case ProfileWAN:
-		return Thresholds{
-			HandshakeRTTMS: HandshakeRTTThresholds{
-				Medium:   800,
-				High:     1500,
-				Critical: 3500,
-			},
-			DNSRTTMS: DNSRTTThresholds{
-				Medium:   400,
-				High:     900,
-				Critical: 2500,
-			},
-			IncompleteHandshakes: IncompleteHandshakeThresholds{
-				Medium: 0.10,
-				High:   0.20,
-			},
-			TCPResets: TCPResetThresholds{
-				Medium:   5.0,
-				High:     50.0,
-				Critical: 100,
-			},
-			Retransmissions: RetransmissionThresholds{
-				Medium:   0.04,
-				High:     0.08,
-				Critical: 0.10,
-			},
-			DNSFailures: DNSFailureThresholds{
-				Medium:   0.02,
-				High:     0.05,
-				Critical: 25,
-			},
-		}
-	default:
-		return GetThresholds(ProfileWAN)
+		return defaults[ProfileWAN]
 	}
+	return thresh
 }
 
 type Severity struct {
