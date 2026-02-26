@@ -121,6 +121,8 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 		return nil, ErrNoPackets
 	}
 
+	totalPackets := len(packets)
+
 	// Calculate TCP reliability metrics
 	retransmissions := 0
 	duplicateACKs := 0
@@ -174,6 +176,7 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 			DurationSeconds: float64(packets[len(packets)-1].Timestamp.Sub(packets[0].Timestamp)),
 			Profile:         a.profile,
 			IncludeTopN:     a.includeTopN,
+			TotalPackets:    totalPackets,
 		},
 		Summary: AnalysisSummary{
 			SchemaVersion:    "1.0.0",
@@ -449,6 +452,7 @@ type RunData struct {
 	DurationSeconds float64       `json:"duration_seconds"`
 	Profile         string        `json:"profile"`
 	IncludeTopN     int           `json:"include_topN"`
+	TotalPackets    int           `json:"total_packets"`
 }
 
 // AnalysisSummary contains summary of the analysis
