@@ -176,7 +176,6 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 			Mode:            "pcap",
 			StartTime:       packets[0].Timestamp,
 			EndTime:         packets[len(packets)-1].Timestamp,
-			Duration:        packets[len(packets)-1].Timestamp.Sub(packets[0].Timestamp),
 			DurationSeconds: float64(packets[len(packets)-1].Timestamp.Sub(packets[0].Timestamp)),
 			Profile:         a.profile,
 			IncludeTopN:     a.includeTopN,
@@ -459,7 +458,7 @@ type RunData struct {
 	Mode            string        `json:"mode"`
 	StartTime       time.Time     `json:"start_time"`
 	EndTime         time.Time     `json:"end_time"`
-	Duration        time.Duration `json:"duration"`
+	Duration        time.Duration `json:"-"`
 	DurationSeconds float64       `json:"duration_seconds"`
 	Profile         string        `json:"profile"`
 	IncludeTopN     int           `json:"include_topN"`

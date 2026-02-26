@@ -128,7 +128,6 @@ func runCaptureMode(cmd *cli.Command) error {
 	result.Run.EndTime = endTime
 	result.Run.Mode = "capture"
 	result.Run.DurationSeconds = duration.Seconds()
-	result.Run.Duration = duration
 
 	jsonData, err := json.Marshal(result)
 	if err != nil {
