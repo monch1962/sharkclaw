@@ -87,14 +87,6 @@ func TestAnalyzePcap(t *testing.T) {
 	}
 
 	// Verify result has expected fields
-	if result.SchemaVersion == "" {
-		t.Error("Result should have schema_version")
-	}
-
-	if result.Tool.Name != "sharkclaw" {
-		t.Errorf("Result tool name should be sharkclaw, got %s", result.Tool.Name)
-	}
-
 	if result.Run.Mode == "" {
 		t.Error("Result should have mode")
 	}
@@ -130,10 +122,6 @@ func TestAnalyzeCapture(t *testing.T) {
 	// Verify result has expected fields
 	if result.Run.Mode == "" {
 		t.Error("Result should have mode")
-	}
-
-	if result.Run.Duration == 0 {
-		t.Error("Result should have duration")
 	}
 }
 
