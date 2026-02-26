@@ -1,92 +1,142 @@
 package capture
 
 import (
-	"errors"
 	"fmt"
 	"time"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
 )
 
-var ErrInvalidDuration = errors.New("duration must be positive")
-var ErrNoInterface = errors.New("network interface is required for capture mode")
-var ErrInvalidBPF = errors.New("invalid BPF filter syntax")
+// Packet represents a captured network packet
+type Packet struct {
+	Timestamp       time.Time
+	Length          int
+	SourceIP        string
+	DestinationIP   string
+	SourcePort      int
+	DestinationPort int
+	Protocol        string
+	SYN             bool
+	ACK             bool
+	RST             bool
+	SeqNumber       uint32
+	AckNumber       uint32
+}
 
-// Capture starts live traffic capture for a specified duration and performs analysis
-func Capture(duration time.Duration, iface string, bpf string, profile string, pretty bool, includeTopN int) error {
-	// Validate duration
-	if duration <= 0 {
-		return ErrInvalidDuration
+// Capturer captures network traffic
+type Capturer struct {
+	handle   *pcap.Handle
+	iface    string
+	bpf      string
+	interval time.Duration
+}
+
+// NewCapturer creates a new network capturer
+func NewCapturer(iface string, bpf string, interval time.Duration) (*Capturer, error) {
+	// Open live capture
+	handle, err := pcap.OpenLive(iface, 65535, true, interval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open capture on interface %s: %w", iface, err)
 	}
 
-	// Validate interface
-	if iface == "" {
-		return ErrNoInterface
-	}
+	return &Capturer{
+		handle:   handle,
+		iface:    iface,
+		bpf:      bpf,
+		interval: interval,
+	}, nil
+}
 
-	// Validate BPF filter (basic syntax check)
-	if bpf != "" {
-		if len(bpf) < 5 {
-			return ErrInvalidBPF
+// Capture captures packets for a specified duration
+func (c *Capturer) Capture(duration time.Duration) ([]Packet, error) {
+	packets := make([]Packet, 0)
+
+	// Set BPF filter if specified
+	if c.bpf != "" {
+		if err := c.handle.SetBPFFilter(c.bpf); err != nil {
+			return nil, fmt.Errorf("failed to set BPF filter: %w", err)
 		}
 	}
 
-	// Validate profile
-	validProfiles := map[string]bool{
-		"lan":  true,
-		"wan":  true,
-		"help": true,
-	}
-	if !validProfiles[profile] {
-		return fmt.Errorf("invalid profile: %s (must be lan, wan, or help)", profile)
-	}
+	// Create packet source
+	packetSource := gopacket.NewPacketSource(c.handle, c.handle.LinkType())
 
-	// Validate includeTopN
-	if includeTopN < 0 {
-		return fmt.Errorf("includeTopN must be non-negative")
+	// Capture packets for the specified duration
+	timeout := time.After(duration)
+	ticker := time.NewTicker(c.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case packet := <-packetSource.Packets():
+			if packet == nil {
+				continue
+			}
+
+			packets = append(packets, extractPacketFields(packet))
+
+		case <-timeout:
+			return packets, nil
+
+		case <-ticker.C:
+			// Continue capturing
+		}
 	}
-
-	// TODO: Implement actual live capture using gopacket
-	// This is a placeholder for the actual implementation
-
-	return nil
 }
 
-// GetDefaultInterface returns the default network interface for capture
-func GetDefaultInterface() string {
-	// TODO: Implement default interface detection
-	// On Linux, this would typically be "any" or detect from system
-	// For now, return a placeholder
-	return "any"
-}
+// extractPacketFields extracts detailed packet fields from gopacket
+func extractPacketFields(packet gopacket.Packet) Packet {
+	var result Packet
 
-// StartCapture starts the capture in the background
-func StartCapture(duration time.Duration, iface string, bpf string) (chan Packet, error) {
-	// Validate inputs
-	if duration <= 0 {
-		return nil, ErrInvalidDuration
+	// Extract metadata
+	result.Timestamp = packet.Metadata().Timestamp
+	result.Length = packet.Metadata().Length
+
+	// Extract IP layer
+	if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
+		ipv4 := ipv4Layer.(*layers.IPv4)
+		result.SourceIP = ipv4.SrcIP.String()
+		result.DestinationIP = ipv4.DstIP.String()
 	}
 
-	if iface == "" {
-		return nil, ErrNoInterface
+	if ipv6Layer := packet.Layer(layers.LayerTypeIPv6); ipv6Layer != nil {
+		ipv6 := ipv6Layer.(*layers.IPv6)
+		result.SourceIP = ipv6.SrcIP.String()
+		result.DestinationIP = ipv6.DstIP.String()
 	}
 
-	// TODO: Implement actual capture using gopacket
-	// This is a placeholder for the actual implementation
+	// Extract transport layer
+	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+		tcp := tcpLayer.(*layers.TCP)
 
-	packets := make(chan Packet, 1000)
-	close(packets)
+		result.Protocol = "TCP"
+		result.SourcePort = int(tcp.SrcPort)
+		result.DestinationPort = int(tcp.DstPort)
+		result.SYN = tcp.SYN
+		result.ACK = tcp.ACK
+		result.RST = tcp.RST
+		// TODO: Extract sequence and acknowledgment numbers when available
+	} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+		udp := udpLayer.(*layers.UDP)
 
-	return packets, nil
+		result.Protocol = "UDP"
+		result.SourcePort = int(udp.SrcPort)
+		result.DestinationPort = int(udp.DstPort)
+	}
+
+	// Extract payload size if needed
+	if len(packet.Data()) > 0 {
+		result.Length = len(packet.Data())
+	}
+
+	return result
 }
 
-// StopCapture stops the active capture
-func StopCapture() error {
-	// TODO: Implement capture stop logic
-	return nil
-}
-
-// Packet represents a captured packet
-type Packet struct {
-	Timestamp time.Time
-	Length    int
-	// TODO: Add more packet fields
+// Close closes the capture handle
+func (c *Capturer) Close() {
+	if c.handle != nil {
+		c.handle.Close()
+	}
 }
