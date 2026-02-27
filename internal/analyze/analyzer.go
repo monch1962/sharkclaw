@@ -165,7 +165,7 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 	resetCount := a.calculateTCPResets(packets)
 	resetRate := 0.0
 	if totalFlows > 0 {
-		resetRate = float64(resetCount) / float64(totalFlows) * 1000 // per 1k flows
+		resetRate = float64(resetCount) / float64(totalFlows) * 100 // percentage
 	}
 	resetSeverity := a.computeSeverityForTCPResets(resetCount, resetRate)
 
@@ -192,6 +192,24 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 
 	// Calculate summary severity from all metrics
 	summarySeverity = a.computeSummarySeverity(incompleteSeverity, resetSeverity, retransmissionSeverity, duplicateACKSeverity, dnsFailureSeverity, thresholds.SeverityInfo, thresholds.SeverityInfo)
+
+	// Count signals triggered (metrics with severity above info)
+	signalsTriggered := 0
+	if incompleteSeverity.Greater(thresholds.SeverityInfo) {
+		signalsTriggered++
+	}
+	if resetSeverity.Greater(thresholds.SeverityInfo) {
+		signalsTriggered++
+	}
+	if retransmissionSeverity.Greater(thresholds.SeverityInfo) {
+		signalsTriggered++
+	}
+	if duplicateACKSeverity.Greater(thresholds.SeverityInfo) {
+		signalsTriggered++
+	}
+	if dnsFailureSeverity.Greater(thresholds.SeverityInfo) {
+		signalsTriggered++
+	}
 
 	if summarySeverity == thresholds.SeverityInfo {
 		summarySeverity = thresholds.SeverityInfo
@@ -220,21 +238,42 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 					Severity:    incompleteSeverity.String(),
 				},
 				Resets: ResetMetrics{
-					Count: a.calculateTCPResets(packets),
+					Count:       a.calculateTCPResets(packets),
+					RatePercent: resetRate,
+					Severity:    resetSeverity.String(),
 				},
 				ReliabilityHints: ReliabilityHints{
 					Retransmissions: RetransmissionMetrics{
-						Count: retransmissions,
+						Count:       retransmissions,
+						RatePercent: retransmissionRate,
+						Severity:    retransmissionSeverity.String(),
 					},
 					DupACKs: DuplicateACKMetrics{
-						Count: duplicateACKs,
+						Count:       duplicateACKs,
+						RatePercent: duplicateACKRate,
+						Severity:    duplicateACKSeverity.String(),
 					},
+				},
+			},
+			DNSMetrics: DNSMetrics{
+				Queries: 0,
+				Failures: FailureMetrics{
+					Count:       a.rates.DNSFailures,
+					RatePercent: dnsFailureRate,
+					Severity:    dnsFailureSeverity.String(),
+				},
+				LatencyRTTms: LatencyRTTMetrics{
+					P50:            0,
+					P95:            0,
+					P99:            0,
+					AboveThreshold: 0,
+					Severity:       thresholds.SeverityInfo.String(),
 				},
 			},
 		},
 		Summary: Summary{
-			Severity: summarySeverity.String(),
-			SignalsTriggered: 0,
+			Severity:         summarySeverity.String(),
+			SignalsTriggered: signalsTriggered,
 		},
 		TopTalkers: TopTalkers{
 			Sources:      sources,
@@ -559,7 +598,7 @@ type AnalysisResult struct {
 	TopTalkers TopTalkers `json:"top_talkers"`
 	Summary    Summary    `json:"summary"`
 
-	Errors     []Error    `json:"errors"`
+	Errors []Error `json:"errors"`
 }
 
 // RunData contains execution data

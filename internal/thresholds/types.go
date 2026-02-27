@@ -210,17 +210,17 @@ func ComputeSeverityForIncompleteHandshakes(count int, rate float64, thresh Inco
 	return SeverityInfo
 }
 
-func ComputeSeverityForTCPResets(count int, ratePer1kFlows float64, thresh TCPResetThresholds) Severity {
-	if count >= thresh.Critical || ratePer1kFlows >= 20.0 {
+func ComputeSeverityForTCPResets(count int, ratePercent float64, thresh TCPResetThresholds) Severity {
+	if count >= 10 || ratePercent >= 1.0 {
+		return SeverityCritical
+	}
+	if count >= 5 || ratePercent >= 0.5 {
 		return SeverityHigh
 	}
-	if count >= 50 || ratePer1kFlows >= 20.0 {
-		return SeverityHigh
-	}
-	if count >= 10 && ratePer1kFlows >= 5.0 {
+	if count >= 3 || ratePercent >= 0.25 {
 		return SeverityMedium
 	}
-	if count >= 5 && ratePer1kFlows >= 1.0 {
+	if count >= 2 || ratePercent >= 0.1 {
 		return SeverityLow
 	}
 	return SeverityInfo
