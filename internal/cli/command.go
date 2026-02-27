@@ -42,7 +42,40 @@ func NewCommandFromRun(run *schema.Run) *Command {
 }
 
 func (c *Command) PrettyString() (string, error) {
+	if c.Run.Mode == schema.RunModeHelp && c.Run.Help != nil {
+		return c.generateSimpleHelp()
+	}
 	return c.Run.PrettyString()
+}
+
+func (c *Command) generateSimpleHelp() (string, error) {
+	help := c.Run.Help
+	result := fmt.Sprintf("sharkclaw - Detects and counts 'weird' network behaviors indicative of attacks and/or network problems.\n\n")
+
+	result += fmt.Sprintf("Commands:\n")
+	for _, cmd := range help.Commands {
+		result += fmt.Sprintf("  %s: %s\n", cmd.Name, cmd.Description)
+		if len(cmd.Examples) > 0 {
+			for _, example := range cmd.Examples {
+				result += fmt.Sprintf("    %s\n", example)
+			}
+		}
+	}
+
+	result += fmt.Sprintf("\nGlobal Flags:\n")
+	for _, flag := range help.Flags {
+		result += fmt.Sprintf("  %s (%s): %s\n", flag.Name, flag.Type, flag.Description)
+		if flag.Default != "" {
+			result += fmt.Sprintf("    Default: %s\n", flag.Default)
+		}
+	}
+
+	result += fmt.Sprintf("\nSupported Signals:\n")
+	for _, signal := range help.Signals {
+		result += fmt.Sprintf("  %s: %s - %s\n", signal.Name, signal.Description, signal.Meaning)
+	}
+
+	return result, nil
 }
 
 func (c *Command) String() (string, error) {
