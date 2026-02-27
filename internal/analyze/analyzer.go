@@ -219,6 +219,26 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 	sources := a.calculateTopTalkers(packets, a.flows, "sources")
 	destinations := a.calculateTopTalkers(packets, a.flows, "destinations")
 
+	// Helper function to create base metrics
+	newBaseMetric := func(count int, rate float64, severity string) BaseMetric {
+		return BaseMetric{
+			Count:       count,
+			RatePercent: rate,
+			Severity:    severity,
+		}
+	}
+
+	// Helper function to create latency RTT metrics
+	newLatencyRTTMetrics := func(severity string) LatencyRTTMetrics {
+		return LatencyRTTMetrics{
+			P50:            0,
+			P95:            0,
+			P99:            0,
+			AboveThreshold: 0,
+			BaseMetric:     BaseMetric{Severity: severity},
+		}
+	}
+
 	result := &AnalysisResult{
 		Run: RunData{
 			Mode:            "pcap",
@@ -233,42 +253,42 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 			TCPMetrics: TCPMetrics{
 				SynTotal: a.calculateSynTotal(packets),
 				IncompleteHandshakes: IncompleteHandshakeMetrics{
-					Count:       incompleteHandshakes,
-					RatePercent: ratePercent,
-					Severity:    incompleteSeverity.String(),
+					BaseMetric: BaseMetric{
+						Count:       incompleteHandshakes,
+						RatePercent: ratePercent,
+						Severity:    incompleteSeverity.String(),
+					},
 				},
 				Resets: ResetMetrics{
-					Count:       a.calculateTCPResets(packets),
-					RatePercent: resetRate,
-					Severity:    resetSeverity.String(),
+					BaseMetric: BaseMetric{
+						Count:       a.calculateTCPResets(packets),
+						RatePercent: resetRate,
+						Severity:    resetSeverity.String(),
+					},
 				},
 				ReliabilityHints: ReliabilityHints{
 					Retransmissions: RetransmissionMetrics{
-						Count:       retransmissions,
-						RatePercent: retransmissionRate,
-						Severity:    retransmissionSeverity.String(),
+						BaseMetric: BaseMetric{
+							Count:       retransmissions,
+							RatePercent: retransmissionRate,
+							Severity:    retransmissionSeverity.String(),
+						},
 					},
 					DupACKs: DuplicateACKMetrics{
-						Count:       duplicateACKs,
-						RatePercent: duplicateACKRate,
-						Severity:    duplicateACKSeverity.String(),
+						BaseMetric: BaseMetric{
+							Count:       duplicateACKs,
+							RatePercent: duplicateACKRate,
+							Severity:    duplicateACKSeverity.String(),
+						},
 					},
 				},
 			},
 			DNSMetrics: DNSMetrics{
 				Queries: 0,
 				Failures: FailureMetrics{
-					Count:       a.rates.DNSFailures,
-					RatePercent: dnsFailureRate,
-					Severity:    dnsFailureSeverity.String(),
+					BaseMetric: newBaseMetric(a.rates.DNSFailures, dnsFailureRate, dnsFailureSeverity.String()),
 				},
-				LatencyRTTms: LatencyRTTMetrics{
-					P50:            0,
-					P95:            0,
-					P99:            0,
-					AboveThreshold: 0,
-					Severity:       thresholds.SeverityInfo.String(),
-				},
+				LatencyRTTms: newLatencyRTTMetrics(thresholds.SeverityInfo.String()),
 			},
 		},
 		Summary: Summary{
@@ -584,7 +604,12 @@ func (a *Analyzer) AnalyzeCapture(packets []Packet, iface string, duration time.
 	return a.AnalyzePcap(packets)
 }
 
-// AnalysisResult contains the analysis results
+// BaseMetric contains shared fields for all metrics
+type BaseMetric struct {
+	Count       int     `json:"count"`
+	RatePercent float64 `json:"rate_percent"`
+	Severity    string  `json:"severity"`
+}
 
 // Summary contains the overall severity summary
 type Summary struct {
@@ -613,8 +638,6 @@ type RunData struct {
 	TotalPackets    int           `json:"total_packets"`
 }
 
-// AnalysisSummary contains summary of the analysis
-
 // Metrics contains network metrics
 type Metrics struct {
 	TCPMetrics TCPMetrics `json:"tcp_metrics"`
@@ -632,30 +655,22 @@ type TCPMetrics struct {
 
 // IncompleteHandshakeMetrics tracks incomplete TCP handshakes
 type IncompleteHandshakeMetrics struct {
-	Count       int     `json:"count"`
-	RatePercent float64 `json:"rate_percent"`
-	Severity    string  `json:"severity"`
+	BaseMetric
 }
 
 // ResetMetrics tracks TCP resets
 type ResetMetrics struct {
-	Count       int     `json:"count"`
-	RatePercent float64 `json:"rate_percent"`
-	Severity    string  `json:"severity"`
+	BaseMetric
 }
 
 // RetransmissionMetrics tracks TCP retransmissions
 type RetransmissionMetrics struct {
-	Count       int     `json:"count"`
-	RatePercent float64 `json:"rate_percent"`
-	Severity    string  `json:"severity"`
+	BaseMetric
 }
 
 // DuplicateACKMetrics tracks duplicate ACKs
 type DuplicateACKMetrics struct {
-	Count       int     `json:"count"`
-	RatePercent float64 `json:"rate_percent"`
-	Severity    string  `json:"severity"`
+	BaseMetric
 }
 
 // ReliabilityHints contains TCP reliability metrics
@@ -673,18 +688,17 @@ type DNSMetrics struct {
 
 // FailureMetrics contains DNS failure metrics
 type FailureMetrics struct {
-	Count       int     `json:"count"`
-	RatePercent float64 `json:"rate_percent"`
-	Severity    string  `json:"severity"`
+	BaseMetric
 }
 
 // LatencyRTTMetrics contains DNS RTT statistics
 type LatencyRTTMetrics struct {
-	P50            int    `json:"p50"`
-	P95            int    `json:"p95"`
-	P99            int    `json:"p99"`
-	AboveThreshold int    `json:"above_threshold"`
-	Severity       string `json:"severity"`
+	P50            int `json:"p50"`
+	P95            int `json:"p95"`
+	P99            int `json:"p99"`
+	AboveThreshold int `json:"above_threshold"`
+	BaseMetric
+	_ string `json:"-"` // Prevent duplicate field warnings
 }
 
 // TopTalker represents a network entity
