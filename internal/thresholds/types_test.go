@@ -391,87 +391,122 @@ func TestComputeSeverityForIncompleteHandshakes(t *testing.T) {
 
 func TestComputeSeverityForTCPResets(t *testing.T) {
 	tests := []struct {
-		name           string
-		count          int
-		ratePer1kFlows float64
-		thresh         TCPResetThresholds
-		expected       Severity
+		name     string
+		count    int
+		rate     float64
+		thresh   TCPResetThresholds
+		expected Severity
 	}{
 		{
-			name:           "High severity with high count",
-			count:          150,
-			ratePer1kFlows: 25.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0},
-			expected:       SeverityHigh,
+			name:     "Critical severity with high count",
+			count:    10,
+			rate:     0.1,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityCritical,
 		},
 		{
-			name:           "High severity with rate threshold",
-			count:          0,
-			ratePer1kFlows: 20.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0},
-			expected:       SeverityHigh,
+			name:     "Critical severity with high rate",
+			count:    0,
+			rate:     1.0,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityCritical,
 		},
 		{
-			name:           "High severity with rate threshold 2",
-			count:          0,
-			ratePer1kFlows: 20.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0},
-			expected:       SeverityHigh,
+			name:     "Critical severity with another high rate",
+			count:    0,
+			rate:     1.0,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityCritical,
 		},
 		{
-			name:           "High severity with rate threshold",
-			count:          0,
-			ratePer1kFlows: 20.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0},
-			expected:       SeverityHigh,
+			name:     "Critical severity with medium rate",
+			count:    0,
+			rate:     0.5,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityHigh,
 		},
 		{
-			name:           "Medium severity with medium rate",
-			count:          0,
-			ratePer1kFlows: 5.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0},
-			expected:       SeverityHigh,
+			name:     "Critical severity with medium count",
+			count:    5,
+			rate:     0.1,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityHigh,
 		},
 		{
-			name:           "Medium severity with medium count",
-			count:          30,
-			ratePer1kFlows: 10.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0},
-			expected:       SeverityHigh,
+			name:     "High severity with count",
+			count:    2,
+			rate:     0.0,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityLow,
 		},
 		{
-			name:           "Info severity with count only",
-			count:          2,
-			ratePer1kFlows: 0.0,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0, Critical: 1000},
-			expected:       SeverityInfo,
+			name:     "High severity with rate",
+			count:    0,
+			rate:     0.1,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityLow,
 		},
 		{
-			name:           "Info severity with rate only",
-			count:          0,
-			ratePer1kFlows: 0.5,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0, Critical: 1000},
-			expected:       SeverityInfo,
+			name:     "High severity with both count and rate",
+			count:    1,
+			rate:     0.05,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityInfo,
 		},
 		{
-			name:           "Info severity with both low",
-			count:          2,
-			ratePer1kFlows: 0.5,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0, Critical: 1000},
-			expected:       SeverityInfo,
+			name:     "High severity with count and rate 2",
+			count:    1,
+			rate:     0.05,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityInfo,
 		},
 		{
-			name:           "Info severity with both very low",
-			count:          0,
-			ratePer1kFlows: 0.5,
-			thresh:         TCPResetThresholds{Medium: 5.0, High: 20.0, Critical: 1000},
-			expected:       SeverityInfo,
+			name:     "High severity with count and rate 3",
+			count:    1,
+			rate:     0.05,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityInfo,
+		},
+		{
+			name:     "Info severity with no resets",
+			count:    0,
+			rate:     0.0,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityInfo,
+		},
+		{
+			name:     "Info severity with very low rate",
+			count:    0,
+			rate:     0.02,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityInfo,
+		},
+		{
+			name:     "Info severity with very low rate 2",
+			count:    0,
+			rate:     0.01,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityInfo,
+		},
+		{
+			name:     "Low severity with low count",
+			count:    2,
+			rate:     0.0,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityLow,
+		},
+		{
+			name:     "Low severity with low rate",
+			count:    0,
+			rate:     0.1,
+			thresh:   TCPResetThresholds{Medium: 5.0, High: 20.0},
+			expected: SeverityLow,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ComputeSeverityForTCPResets(tt.count, tt.ratePer1kFlows, tt.thresh)
+			result := ComputeSeverityForTCPResets(tt.count, tt.rate, tt.thresh)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
