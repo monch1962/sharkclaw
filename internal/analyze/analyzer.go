@@ -199,6 +199,10 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 				},
 			},
 		},
+		Summary: Summary{
+			Severity: incompleteSeverity.String(),
+			SignalsTriggered: 0,
+		},
 		TopTalkers: TopTalkers{
 			Sources:      sources,
 			Destinations: destinations,
@@ -485,10 +489,19 @@ func (a *Analyzer) AnalyzeCapture(packets []Packet, iface string, duration time.
 }
 
 // AnalysisResult contains the analysis results
+
+// Summary contains the overall severity summary
+type Summary struct {
+	Severity         string `json:"severity"`
+	SignalsTriggered int    `json:"signals_triggered"`
+}
+
 type AnalysisResult struct {
 	Run        RunData    `json:"run"`
 	Metrics    Metrics    `json:"metrics"`
 	TopTalkers TopTalkers `json:"top_talkers"`
+	Summary    Summary    `json:"summary"`
+
 	Errors     []Error    `json:"errors"`
 }
 
@@ -505,10 +518,6 @@ type RunData struct {
 }
 
 // AnalysisSummary contains summary of the analysis
-type AnalysisSummary struct {
-	SignalsTriggered int    `json:"signals_triggered"`
-	Severity         string `json:"severity"`
-}
 
 // Metrics contains network metrics
 type Metrics struct {
