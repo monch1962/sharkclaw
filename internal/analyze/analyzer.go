@@ -160,6 +160,39 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 
 	// Calculate summary severity
 	summarySeverity := incompleteSeverity
+
+	// Calculate severity for other metrics
+	resetCount := a.calculateTCPResets(packets)
+	resetRate := 0.0
+	if totalFlows > 0 {
+		resetRate = float64(resetCount) / float64(totalFlows) * 1000 // per 1k flows
+	}
+	resetSeverity := a.computeSeverityForTCPResets(resetCount, resetRate)
+
+	// Calculate retransmission rate
+	retransmissionRate := 0.0
+	if totalPackets > 0 {
+		retransmissionRate = float64(retransmissions) / float64(totalPackets) * 100
+	}
+	retransmissionSeverity := a.computeSeverityForRetransmissions(retransmissionRate)
+
+	// Calculate duplicate ACK rate
+	duplicateACKRate := 0.0
+	if totalPackets > 0 {
+		duplicateACKRate = float64(duplicateACKs) / float64(totalPackets) * 100
+	}
+	duplicateACKSeverity := a.computeSeverityForDuplicateACKs(duplicateACKs, duplicateACKRate)
+
+	// Calculate DNS failure rate
+	dnsFailureRate := 0.0
+	if totalPackets > 0 {
+		dnsFailureRate = float64(a.rates.DNSFailures) / float64(totalPackets) * 100
+	}
+	dnsFailureSeverity := a.computeSeverityForDNSFailures(a.rates.DNSFailures, dnsFailureRate)
+
+	// Calculate summary severity from all metrics
+	summarySeverity = a.computeSummarySeverity(incompleteSeverity, resetSeverity, retransmissionSeverity, duplicateACKSeverity, dnsFailureSeverity, thresholds.SeverityInfo, thresholds.SeverityInfo)
+
 	if summarySeverity == thresholds.SeverityInfo {
 		summarySeverity = thresholds.SeverityInfo
 	}
@@ -200,7 +233,7 @@ func (a *Analyzer) AnalyzePcap(packets []Packet) (*AnalysisResult, error) {
 			},
 		},
 		Summary: Summary{
-			Severity: incompleteSeverity.String(),
+			Severity: summarySeverity.String(),
 			SignalsTriggered: 0,
 		},
 		TopTalkers: TopTalkers{
@@ -424,6 +457,30 @@ func (a *Analyzer) computeSeverityForDNSRTT(sortedRTT []int64) thresholds.Severi
 }
 
 // calculateLatency calculates latency statistics (p50, p95, p99)
+
+// computeSummarySeverity calculates the overall severity summary based on all metric severities
+func (a *Analyzer) computeSummarySeverity(incompleteSeverity, resetSeverity, retransmissionSeverity, duplicateACKSeverity, dnsFailureSeverity, handshakeRTTSeverity, dnsRTTSeverity thresholds.Severity) thresholds.Severity {
+	maxSeverity := incompleteSeverity
+	if resetSeverity.Greater(maxSeverity) {
+		maxSeverity = resetSeverity
+	}
+	if retransmissionSeverity.Greater(maxSeverity) {
+		maxSeverity = retransmissionSeverity
+	}
+	if duplicateACKSeverity.Greater(maxSeverity) {
+		maxSeverity = duplicateACKSeverity
+	}
+	if dnsFailureSeverity.Greater(maxSeverity) {
+		maxSeverity = dnsFailureSeverity
+	}
+	if handshakeRTTSeverity.Greater(maxSeverity) {
+		maxSeverity = handshakeRTTSeverity
+	}
+	if dnsRTTSeverity.Greater(maxSeverity) {
+		maxSeverity = dnsRTTSeverity
+	}
+	return maxSeverity
+}
 func (a *Analyzer) calculateLatency(latencies []int64) LatencyMetrics {
 	if len(latencies) == 0 {
 		return LatencyMetrics{
